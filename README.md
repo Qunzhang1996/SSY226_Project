@@ -1,3 +1,6 @@
 # SSY226_Project
 This is for SSY226
-# repo for controller_python https://github.com/Qunzhang1996/MotionPlanning-python
+## repo for controller_python:  
+https://github.com/Qunzhang1996/MotionPlanning-python
+## link for papers:
+https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9304813
