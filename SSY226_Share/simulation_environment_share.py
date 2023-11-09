@@ -13,10 +13,9 @@ nt = 4  # number of variables in trajectories
 class ST(IntEnum):
     V, S, N, T = range(nt)
 
-# CAV model is using more states internally
 class C(IntEnum):
     V_S, S, N, T, V_N = range(5)
-
+# states: v_s longitudinal speed, v_n lateral speed, s longitudinal position, time, n lateral position
 
 class VehicleTwin:
     """Useful class to represent other vehicles, digital twin"""
@@ -340,6 +339,8 @@ class Car(Vehicle):
         if dep is None:
             return {}
         else:
+            # print("dep result is",dep.stats(1),"end print")
+
             return dep.stats(1)
 
     def compute_planned_desired_trajectory(self):
@@ -383,9 +384,14 @@ class Car(Vehicle):
             x0 = [0] * self.nx
             for i in range(self.nx):
                 x0[i] = scipy.interpolate.interp1d(tt,self.planned_XU0[i::(self.nx+self.nu)],kind='cubic')(t)
+                
+
             x0[C.T] = self.state[C.T]
+            
         else:
             x0 = self.state
+        # print('this is x0')
+        # print(x0)
         print(self.name, 'current/projected state for s', self.state[C.S], x0[C.S])
         print(self.name, 'current/projected state for v_s', self.state[C.V_S], x0[C.V_S])
 
@@ -403,12 +409,20 @@ class Car(Vehicle):
             old_tt = self.planned_trajectory[C.T, :]
             new_tt = [self.state[C.T] + self.planning_dt *
                       i for i in range(self.planning_points)]
+
+            print('this is time')
+            print(old_tt)
+            print(new_tt)
             for i in range(self.nx):
                 local_XU_0[i::(self.nx+self.nu)] = scipy.interpolate.interp1d(
                     old_tt, self.planned_XU0[i::(self.nx+self.nu)], fill_value='extrapolate', kind='cubic')(new_tt)
+            # print('this is first interp')
+            # print(local_XU_0)
             for i in range(self.nx, self.nx+self.nu):
                 local_XU_0[i::(self.nx+self.nu)] = scipy.interpolate.interp1d(old_tt[:-1],
                                                                               self.planned_XU0[i::(self.nx+self.nu)], fill_value='extrapolate', kind='cubic')(new_tt[:-1])
+            # print('this is second interp')
+            # print(local_XU_0)
             v_p_weight_match = 1e2*(1 - 0.5*(np.tanh(10/self.n_points_match*(
                 np.arange(self.planning_points-1) - self.n_points_match))+1))
             # v_p_weight_match = np.zeros(self.planning_points-1)
@@ -442,9 +456,14 @@ class Car(Vehicle):
                               v_p_weight_match, v_P_match,
                               v_p_s_P_switch,
                               local_XU_0)  # provide previous solution as an initial guess
+            # print("this is sol")
+            # print(sol)
+            # print("this is sol______________________")
             status = self.get_stats()
             print(self.name, self.state[C.S], 'planning desired',
                   'Status', status['return_status'], 'J', sol[-1])
+            # print("this is status")
+            # print(status)
             self.desired_XU0 = sol[2].full()[0]
             self.desired_trajectory = sol[0].full()[:4, :]  # eliminate V_N
             self.desired_sol = sol
@@ -470,6 +489,7 @@ class Car(Vehicle):
 
         # If conflict detected rename planned as desired, plan planned again
         v_trajectory = sol[0].full()
+        # print('this is v_trajectory', v_trajectory,  "this")
         if v_trajectory[C.N, 0] < -self.lane_width/2 and v_trajectory[C.N, -1] > -self.lane_width/2 and self.desired_sol is None:
             # This is only a indication of a potential conflict
             # TODO Check for a conflict of trajectories as well
