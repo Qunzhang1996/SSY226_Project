@@ -5,8 +5,9 @@ import scipy
 import casadi as cs
 from enum import IntEnum
 import warnings
-from vehicle_class import Vehicle, Car, Truck_CC,ST,C
+from vehicle_class import ST,C
 from car_km_class import Car_km
+from truck_km_class import Truck_CC
 def main():
     #################
     # In simulation

@@ -16,7 +16,7 @@ class Car_km(Vehicle):
         self.nu = 2
         self.state = np.zeros(self.nx)
         self.state[:self.nt] = state
-        self.state[C.V_N] = 0
+        self.state[C_k.V_km] = 0
         self.desired_XU0 = None
         self.v0 = 25
         self.planned_XU0 = [0] * (self.nx*(self.planning_points)+self.nu*(self.planning_points - 1))
@@ -83,7 +83,6 @@ class Car_km(Vehicle):
         self.K_u = u
 
     def compute_K(self, dt_sim):
-        
         nx = self.nx
         nu = self.nu
         nx = nx - 1
@@ -113,7 +112,6 @@ class Car_km(Vehicle):
         P = la.solve_discrete_are(a, b, self.q, self.r)
         R = la.solve(self.r + b.T.dot(P).dot(b), b.T.dot(P).dot(a))
         self.R = R
-
         # R gain for predicting simulation
         dt = self.planning_dt/self.dt_factor
         newA = vxA*dt + np.eye(nx)
@@ -123,7 +121,69 @@ class Car_km(Vehicle):
         P = la.solve_discrete_are(a, b, self.q, self.r)
         R = la.solve(self.r + b.T.dot(P).dot(b), b.T.dot(P).dot(a))
         self.R_planning = R
+    
+    def compute_MPC(self, dt_sim, error0, N=30):
+        nx = self.nx
+        nu = self.nu
+        nx = nx - 1
+        x0 = cs.SX.sym('x', nx)
+        u0 = cs.SX.sym('u', nu)
+        # dot_x = cs.vertcat(dot_v_s, dot_s, dot_n, dot_v_n)
+        # x = cs.vertcat(v_s, s, n, v_n)
+        xAxb = cs.linearize(self.K_dot_x,self.K_x,x0)
+        xAb = cs.linear_coeff(xAxb,self.K_x)
+        xA = xAb[0]
+        uAxb = cs.linearize(self.K_dot_x,self.K_u,u0)
+        uAb = cs.linear_coeff(uAxb,self.K_u)
+        uA = uAb[0]
+        vx0 = [0] * nx
+        vu0 = [0] * nu
+        fxA = cs.Function('fxA',[x0,self.K_u],[xA])
+        vxA = fxA(vx0,vu0)
+        fuA = cs.Function('fuA',[self.K_dot_x,u0],[uA])
+        vuA = fuA(vx0,vu0)
+        # dt = self.ref_sw.dt
+        dt = dt_sim
+        newA = vxA*dt + np.eye(nx)
+        a = newA.full()
+        newB = vuA*dt
+        b = newB.full()
+        from scipy import linalg as la
+        # Setup the optimization problem
+        opti = cs.Opti()  # 创建一个优化问题
+        # Decision variables for state and inpu
+        X = opti.variable(nx, N+1)  # 状态变量，每一列对应一个时间步
+        U = opti.variable(nu, N)    # 控制变量，每一列对应一个时间步
+         # Objective function
+        obj = 0  # 初始化目标函数
+        for i in range(N):
+            obj += cs.mtimes([X[:, i].T, self.q, X[:, i]])  # 状态代价
+            obj += cs.mtimes([U[:, i].T, self.r, U[:, i]])  # 控制代价
+        # Add the objective function to the optimization problem
+        opti.minimize(obj)
 
+        # 约束条件
+        for i in range(N):
+            # 系统动态约束，这里使用的是离散化后的动态方程
+            opti.subject_to(X[:, i+1] == cs.mtimes(a, X[:, i]) + cs.mtimes(b, U[:, i]))
+        # 初始状态约束
+        opti.subject_to(X[:, 0] == error0)
+        # Control input constraints
+        # u_min = 0    # 
+        # u_max = 50   # 
+        # opti.subject_to(opti.bounded(u_min, U, u_max)) 
+        # Constraint to iput lead to problem!!!!!!!!!!!!!!
+        # Configure the solver
+        opts = {"ipopt.print_level": 0, "print_time": 0}
+        opti.solver('ipopt')
+
+        # Solve the optimization problem
+        sol = opti.solve()
+
+        # Get the optimal control input sequence
+        u_optimal = sol.value(U[:, 0])
+
+        return u_optimal
 
     def create_opti(self):  # create an optimization problem
         N = self.planning_points - 1
@@ -419,7 +479,8 @@ class Car_km(Vehicle):
         e[1] = self.state[C.S] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.S::(self.nx+self.nu)],kind='cubic')(t)
         e[2] = self.state[C.N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.N::(self.nx+self.nu)],kind='cubic')(t)
         e[3] = self.state[C.V_N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_N::(self.nx+self.nu)],kind='cubic')(t)
-        u = -np.matmul(self.R,e)
+        # u = -np.matmul(self.R,e)
+        u=self.compute_MPC(dt, e, 30)
         self.state = self.car_F(self.state, u, dt).full().ravel()
         self.history_state.append(self.get_state())
         self.history_control.append(u)
