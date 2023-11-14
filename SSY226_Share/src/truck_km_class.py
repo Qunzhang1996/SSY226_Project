@@ -6,6 +6,7 @@ import casadi as cs
 from enum import IntEnum
 from vehicle_class import C, ST,C_k,Vehicle
 from car_km_class import Car_km
+
 import warnings
 warnings.simplefilter("error")
 
