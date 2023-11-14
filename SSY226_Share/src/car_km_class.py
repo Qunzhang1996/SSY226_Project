@@ -265,7 +265,7 @@ class Car_km(Vehicle):
 
         # Get the optimal control input sequence
         u_optimal = sol.value(U[:, 0])
-
+        1111
         return u_optimal
     
     def compute_km_mpc(self, dt_sim, error0, N=30):
