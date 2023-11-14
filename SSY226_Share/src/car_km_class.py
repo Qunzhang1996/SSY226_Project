@@ -102,7 +102,7 @@ class Car_km(Vehicle):
         # X_km, Y_km, Psi, T, V_km 
         # states: x_km longitudinal speed, y_km lateral speed, psi heading, time, v_km velocity
         x_km, y_km, psi, t, v_km  = x[0], x[1], x[2], x[3], x[4]
-        # controls: a_s longitudinal acceleration, a_n lateral acceleration
+        # controls: a_km acceleration, delta steering angle
         a_km, delta = u[0], u[1]
         dot_x_km = v_km*np.cos(psi)
         dot_y_km = v_km*np.sin(psi)
@@ -356,8 +356,10 @@ class Car_km(Vehicle):
         n_at_end = (P_road[0]/2 * (cs.tanh(P_road[1]*(y_km[-1]-P_road[2]))+1)+P_road[3]
                   + P_road[4]/2 * (cs.tanh(P_road[5]*(y_km[-1]-P_road[6]))+1)+P_road[7])/2
         # n_at_end = 1
-        J = p_weight_a_s*cs.sumsqr(a_s) + p_weight_a_n * cs.sumsqr(a_n) + 0.1*1e-1*cs.sumsqr(
-            v_s - p_v_s_nominal) + 1e3*cs.sumsqr(v_n[-1]) + 1e2*cs.sumsqr(x_km[-1] - n_at_end) # - p_nf)  # 1e3*(n[-1])**2 #+
+        # J = p_weight_a_s*cs.sumsqr(a_s) + p_weight_a_n * cs.sumsqr(a_n) + 0.1*1e-1*cs.sumsqr(
+        #     v_s - p_v_s_nominal) + 1e3*cs.sumsqr(v_n[-1]) + 1e2*cs.sumsqr(x_km[-1] - n_at_end) # - p_nf)  # 1e3*(n[-1])**2 #+
+        J = p_weight_a_s*cs.sumsqr(a_km) + p_weight_a_n * cs.sumsqr(delta) + 0.1*1e-1*cs.sumsqr(
+            v_km - p_v_s_nominal) + 1e3*cs.sumsqr(v_km[-1]) + 1e2*cs.sumsqr(x_km[-1] - n_at_end) # - p_nf)  # 1e3*(n[-1])**2 #+
         for i in range(N+1):
             # penalty on the distance to first of the surrounding vehicles
             J += p_weight_P_paths[0]*1/2*(cs.tanh(s[i] - p_s_P_switch[0]) + 1)*1/2*(
