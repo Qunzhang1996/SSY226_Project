@@ -65,11 +65,19 @@ class VehicleTwin:
 
         if self.desired_trajectory is not None:
             self.interpolated_desired_trajectory = scipy.interpolate.interp1d(
-                self.desired_trajectory[ST.T, :], self.desired_trajectory, fill_value='extrapolate', kind='cubic')(current_time+np.arange(planning_points)*dt)
+                self.desired_trajectory[C_k.T, :], self.desired_trajectory, fill_value='extrapolate', kind='cubic')(current_time+np.arange(planning_points)*dt)
         else:
             # Desired trajectory is not computed by all vehicles at all moments so do nothing
             self.interpolated_desired_trajectory == None
 
+    ####calculate Psi array
+    def calculate_heading_array(self, current_time, planning_points, dt):
+        psi_array = np.zeros(planning_points)
+        for i in range(planning_points - 1):
+            current_time_point = current_time + i * dt
+            psi_array[i] = self.calculate_heading(current_time_point, dt)
+        return psi_array
+    
     ###method used to calculate the Psi
     def calculate_heading(self, current_time, dt):
         """Calculate the heading angle (Psi) at the current time using the interpolated trajectory."""

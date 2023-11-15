@@ -349,7 +349,7 @@ class Car(Vehicle):
         for v in self.vehicles:
             self.vehicles[v].interpolate_trajectories(
                 current_time, self.planning_points, self.planning_dt)
-
+        #no need to change, here, we get the s and n, or we can view it as X_km and Y_km
         flagDesired = False
         self.P_path_v = np.zeros((4, self.planning_points))
         if len(self.vehicles) > 0: # if we know about at least one vehicle

@@ -435,13 +435,13 @@ class Car_km(Vehicle):
 
     def compute_planned_desired_trajectory(self):
         """Compute planned and desired trajectory for CAV"""
-        current_time = self.state[C.T]  # HACK, take current time from the current vehicle state
+        current_time = self.state[C_k.T]  # HACK, take current time from the current vehicle state
         for v in self.vehicles:
             self.vehicles[v].interpolate_trajectories(
                 current_time, self.planning_points, self.planning_dt)
 
         flagDesired = False
-        self.P_path_v = np.zeros((4, self.planning_points))
+        self.P_path_v = np.zeros((4, self.planning_points))#no need to change here, for the trajectory  contain same info. view s and n  as X_km and Y_km
         if len(self.vehicles) > 0: # if we know about at least one vehicle
             vA = list(self.vehicles.keys())[0]
             if self.vehicles[vA].desired_trajectory is not None:
