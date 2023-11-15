@@ -150,21 +150,20 @@ class Car_km(Vehicle):
         b = newB.full()
         from scipy import linalg as la
         # Setup the optimization problem
-        opti = cs.Opti()  # 创建一个优化问题
+        opti = cs.Opti() 
         # Decision variables for state and inpu
         X = opti.variable(nx, N+1)  # 状态变量，每一列对应一个时间步
         U = opti.variable(nu, N)    # 控制变量，每一列对应一个时间步
          # Objective function
-        obj = 0  # 初始化目标函数
+        obj = 0  # init obj
         for i in range(N):
-            obj += cs.mtimes([X[:, i].T, self.q, X[:, i]])  # 状态代价
-            obj += cs.mtimes([U[:, i].T, self.r, U[:, i]])  # 控制代价
+            obj += cs.mtimes([X[:, i].T, self.q, X[:, i]])  # state cost
+            obj += cs.mtimes([U[:, i].T, self.r, U[:, i]])  # input cost
         # Add the objective function to the optimization problem
         opti.minimize(obj)
 
-        # 约束条件
+        # constraints
         for i in range(N):
-            # 系统动态约束，这里使用的是离散化后的动态方程
             opti.subject_to(X[:, i+1] == cs.mtimes(a, X[:, i]) + cs.mtimes(b, U[:, i]))
         # 初始状态约束
         opti.subject_to(X[:, 0] == error0)
