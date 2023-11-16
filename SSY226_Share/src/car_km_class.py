@@ -441,25 +441,25 @@ class Car_km(Vehicle):
                 current_time, self.planning_points, self.planning_dt)
 
         flagDesired = False
-        self.P_path_v = np.zeros((4, self.planning_points))#no need to change here, for the trajectory  contain same info. view s and n  as X_km and Y_km
+        self.P_path_v = np.zeros((4, self.planning_points))#no need to change here, for the trajectory  contain same info. view s = X_km and n = Y_km, but the num should be changed
         if len(self.vehicles) > 0: # if we know about at least one vehicle
             vA = list(self.vehicles.keys())[0]
             if self.vehicles[vA].desired_trajectory is not None:
                 self.P_path_v[0:2, :] = self.vehicles[vA].interpolated_desired_trajectory[[
-            C.S, C.N], :]  # s and n of v1
+            C_k.X_km, C_k.Y_km], :]  # s and n of v1
                 flagDesired = True
             else:
                 self.P_path_v[0:2, :] = self.vehicles[vA].interpolated_planned_trajectory[[
-            C.S, C.N], :]  # s and n of v1
+            C_k.X_km, C_k.Y_km], :]  # s and n of v1
         if len(self.vehicles) > 1: # if we know about two vehicles
             vB = list(self.vehicles.keys())[1]
             if self.vehicles[vA].desired_trajectory is not None:
                 self.P_path_v[2:4, :] = self.vehicles[vB].interpolated_desired_trajectory[[
-            C.S, C.N], :]  # s and n of v1
+            C_k.X_km, C_k.Y_km], :]  # s and n of v1
                 flagDesired = True
             else:
                 self.P_path_v[2:4, :] = self.vehicles[vB].interpolated_planned_trajectory[[
-            C.S, C.N], :]  # s and n of v1
+            C_k.X_km, C_k.Y_km], :]  # s and n of v1
         else:
             self.P_path_v[2:4, :] = self.P_path_v[0:2, :] # if we know about only one vehicles, we make the second one to be the same as the first
 
@@ -469,7 +469,7 @@ class Car_km(Vehicle):
         # a new plan is not computed from the current state but from the projected state on the previous plan.
         # This is to prevent a sudden change of the error in the track following algorithms, we keep the "old" tracking error.
         if self.planned_sol is not None:
-            tt = self.planned_trajectory[C.T, :]
+            tt = self.planned_trajectory[C_k.T, :]
             t = current_time
             x0 = [0] * self.nx
             for i in range(self.nx):
