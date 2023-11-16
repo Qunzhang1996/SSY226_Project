@@ -168,9 +168,9 @@ class Car_km(Vehicle):
         # 初始状态约束
         opti.subject_to(X[:, 0] == error0)
         # Control input constraints
-        u_min = 0    # 
-        u_max = 50   # 
-        opti.subject_to(opti.bounded(u_min, U, u_max)) 
+        # u_min = 0    # 
+        # u_max = 50   # 
+        # opti.subject_to(opti.bounded(u_min, U, u_max)) 
         # Constraint to iput lead to problem!!!!!!!!!!!!!!
         # Configure the solver
         opts = {"ipopt.print_level": 0, "print_time": 0}
