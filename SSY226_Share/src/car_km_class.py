@@ -152,8 +152,8 @@ class Car_km(Vehicle):
         # Setup the optimization problem
         opti = cs.Opti() 
         # Decision variables for state and inpu
-        X = opti.variable(nx, N+1)  # 状态变量，每一列对应一个时间步
-        U = opti.variable(nu, N)    # 控制变量，每一列对应一个时间步
+        X = opti.variable(nx, N+1)  # state
+        U = opti.variable(nu, N)    # control
          # Objective function
         obj = 0  # init obj
         for i in range(N):
@@ -168,9 +168,9 @@ class Car_km(Vehicle):
         # 初始状态约束
         opti.subject_to(X[:, 0] == error0)
         # Control input constraints
-        # u_min = 0    # 
-        # u_max = 50   # 
-        # opti.subject_to(opti.bounded(u_min, U, u_max)) 
+        u_min = 0    # 
+        u_max = 50   # 
+        opti.subject_to(opti.bounded(u_min, U, u_max)) 
         # Constraint to iput lead to problem!!!!!!!!!!!!!!
         # Configure the solver
         opts = {"ipopt.print_level": 0, "print_time": 0}
