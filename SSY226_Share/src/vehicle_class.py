@@ -48,60 +48,27 @@ class VehicleTwin:
         if self.planned_trajectory is not None:
             # Interpolate/extrapolate previously received
             self.interpolated_planned_trajectory = scipy.interpolate.interp1d(
-                self.planned_trajectory[C_k.T, :], self.planned_trajectory, fill_value='extrapolate', kind='cubic')(current_time+np.arange(planning_points)*dt)
+                self.planned_trajectory[ST.T, :], self.planned_trajectory, fill_value='extrapolate', kind='cubic')(current_time+np.arange(planning_points)*dt)
         else:
             # Planned trajectory is either not yet received or not computed by that vehicle
             # Use a generic model to predict future points
             self.interpolated_planned_trajectory = np.zeros(
-                (nt+1, planning_points))
-            self.interpolated_planned_trajectory[C_k.V_km] = np.ones(planning_points) * self.state[C_k.V_km]
-            self.interpolated_planned_trajectory[C_k.X_km] = self.state[C_k.X_km] + (
-                current_time - self.state[C_k.T]) * self.state[C_k.V_km] + np.arange(planning_points) * self.state[C_k.V_km] * dt
-            self.interpolated_planned_trajectory[C_k.Y_km] = np.ones(planning_points) * self.state[C_k.Y_km]
-            self.interpolated_planned_trajectory[C_k.T] = current_time + np.arange(planning_points) * dt
-            self.interpolated_planned_trajectory[C_k.Psi, :] = self.calculate_heading_array(current_time, planning_points, dt)
+                (nt, planning_points))
+            self.interpolated_planned_trajectory[ST.V] = np.ones(
+                planning_points) * self.state[ST.V]
+            self.interpolated_planned_trajectory[ST.S] = self.state[ST.S] + (
+                current_time - self.state[ST.T]) * self.state[ST.V] + np.arange(planning_points)*self.state[ST.V]*dt
+            self.interpolated_planned_trajectory[ST.N] = np.ones(
+                planning_points) * self.state[ST.N]
+            self.interpolated_planned_trajectory[ST.T] = current_time + np.arange(
+                planning_points)*dt
 
         if self.desired_trajectory is not None:
             self.interpolated_desired_trajectory = scipy.interpolate.interp1d(
-                self.desired_trajectory[C_k.T, :], self.desired_trajectory, fill_value='extrapolate', kind='cubic')(current_time+np.arange(planning_points)*dt)
+                self.desired_trajectory[ST.T, :], self.desired_trajectory, fill_value='extrapolate', kind='cubic')(current_time+np.arange(planning_points)*dt)
         else:
             # Desired trajectory is not computed by all vehicles at all moments so do nothing
             self.interpolated_desired_trajectory == None
-
-    ####calculate Psi array
-    def calculate_heading_array(self, current_time, planning_points, dt):
-        psi_array = np.zeros(planning_points)
-        for i in range(planning_points - 1):
-            current_time_point = current_time + i * dt
-            psi_array[i] = self.calculate_heading(current_time_point, dt)
-        return psi_array
-    
-    ###method used to calculate the Psi
-    def calculate_heading(self, current_time, dt):
-        """Calculate the heading angle (Psi) at the current time using the interpolated trajectory."""
-        if self.interpolated_planned_trajectory is not None:
-            # Find the index of the current time in the interpolated trajectory
-            time_index = np.searchsorted(self.interpolated_planned_trajectory[C_k.T], current_time)
-    
-            # Ensure we have at least one future point to calculate heading
-            if time_index < len(self.interpolated_planned_trajectory[C_k.T]) - 1:
-                # Get the current and next trajectory points
-                current_point = self.interpolated_planned_trajectory[:, time_index]
-                next_point = self.interpolated_planned_trajectory[:, time_index + 1]
-                
-                # Calculate the difference in position
-                delta_s = next_point[C_k.X_km] - current_point[C_k.X_km]
-                delta_n = next_point[C_k.Y_km] - current_point[C_k.Y_km]
-                
-                # Calculate the heading angle (Psi)
-                psi = np.arctan2(delta_n, delta_s)         
-                return psi
-            else:
-                # If we are at the end of the trajectory, we can't calculate a heading
-                return None
-        else:
-            # If there is no planned trajectory, we can't calculate a heading
-            return None
 
 
 class Vehicle:
@@ -147,7 +114,6 @@ class Vehicle:
             data['history_state'] = np.array(self.history_state).T
             data['history_planned_trajectory'] = self.history_planned_trajectory
             pickle.dump(data, handle)
-
 
 
 class Car(Vehicle):
