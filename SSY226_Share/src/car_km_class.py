@@ -51,6 +51,8 @@ class Car_km(Vehicle):
         self.history_planned_control = []
         self.history_control = []
         self.dt = dt
+        #TODO: add the following two lines with the update of the km of state and input
+        #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         
         
     def get_state(self):
@@ -356,9 +358,6 @@ class Car_km(Vehicle):
                               v_p_weight_match, v_P_match,
                               v_p_s_P_switch,
                               local_XU_0)  # provide previous solution as an initial guess
-            # print("this is sol")
-            # print(sol)
-            # print("this is sol______________________")
             status = self.get_stats()
             print(self.name, self.state[C.S], 'planning desired',
                   'Status', status['return_status'], 'J', sol[-1])
@@ -560,8 +559,12 @@ class Car_km(Vehicle):
         dx = np.diff(x, prepend=x[0])
         psi = np.arctan2(dy, dx)
         return psi
+    
 
-    def state_transformation(self, state):# transfer km state to vehicle state
+
+    # here is the transformation between mass_point and km state
+    def transformation_mp2km(self, state):
+        """Transfer from  km state to mass_point state"""
         x_km, y_km, psi, t, v_km = state[0], state[1], state[2], state[3], state[4]
         x = x_km
         y = y_km
@@ -572,6 +575,82 @@ class Car_km(Vehicle):
         s=x
         n=y
         return np.array([v_s, s, n, t, v_n])
+    
+    def transformation_km2mp(self, state):
+        """Transfer from mass_point to km state"""
+        v_s, s, n, t, v_n = state[0], state[1], state[2], state[3], state[4]
+        x_km = s
+        y_km = n
+        psi = np.arctan2(np.sin(np.arctan2(v_n, v_s)), np.cos(np.arctan2(v_n, v_s)))
+        v_km = np.sqrt(v_s**2+v_n**2)
+        return np.array([x_km, y_km, psi, t, v_km])
+
+    def input_transform(self, u):
+        """Transfer from km input to mass_point input, a, delta to ax,ay"""
+        a, delta = u[0], u[1]
+        ax = a*np.cos(delta)
+        ay = a*np.sin(delta)
+        return np.array([ax, ay])
+    
+    def input_transform_inv(self, u):
+        """Transfer from mass_point input to km input, ax,ay to a, delta"""
+        ax, ay = u[0], u[1]
+        a = np.sqrt(ax**2+ay**2)
+        delta = np.arctan2(ay, ax)
+        return np.array([a, delta])
+
+
+
+
+    def simulate_km(self, dt):
+        """compute new state in simulation, transfer from mass_point to km state
+        and transfer from km state to mass_point state"""
+
+        #TODO: add the carla state
+        state_carla=np.zeros([5,1])#"represent this with the state from Carla"   X, Y, PSI, T, V
+        state_mp_planned=np.zeros([self.nx,1])
+        tt = self.planned_trajectory[C.T, :]
+        t = self.state[C.T]
+        state_carla[C_k.T]=t
+        #get target point of mass_point
+        state_mp_planned[C.V_S] = scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_S::(self.nx+self.nu)],kind='cubic')(t)
+        state_mp_planned[C.S]= scipy.interpolate.interp1d(tt,self.planned_XU0[C.S::(self.nx+self.nu)],kind='cubic')(t)
+        state_mp_planned[C.N]= scipy.interpolate.interp1d(tt,self.planned_XU0[C.N::(self.nx+self.nu)],kind='cubic')(t)
+        state_mp_planned[C.V_N]= scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_N::(self.nx+self.nu)],kind='cubic')(t)
+        state_mp_planned[C.T]=t
+        #transfer from mass_point to km state
+        state_km_planned=self.transformation_mp2km(state_mp_planned)
+
+        #make sure the velocity is not zero
+        if state_carla[C_k.V_km]==0:
+            state_carla[C_k.V_km]=0.001
+
+        #calculate the error
+        e=np.zeros([self.nx-1,1])
+        e[0]=state_carla[C_k.X_km]-state_km_planned[C_k.X_km]
+        e[1]=state_carla[C_k.Y_km]-state_km_planned[C_k.Y_km]
+        e[2]=state_carla[C_k.Psi]-state_km_planned[C_k.Psi]
+        e[3]=state_carla[C_k.V_km]-state_km_planned[C_k.V_km]
+
+        #make sure the heading error is in the range of [-pi,pi]
+        e[2]=np.arctan2(np.sin(e[2]),np.cos(e[2]))
+        
+        #calculate the input through MPC
+        #TODO:have to check the update in the code above AB Calculation
+        u_optimal=self.compute_km_mpc(e)
+        #TODO:output the input of the km vehicle to the carla vehicle
+        #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        
+        #transfer from km input to mass_point input
+        u_optimal_mp=self.input_transform_inv(u_optimal)
+        #transfer carla state to mp state
+        state_mp_carla=self.transformation_km2mp(state_carla)
+
+        #update the state of the pm vehicle
+        self.state = self.car_F(state_mp_carla, u_optimal_mp, dt).full().ravel()
+        self.history_state.append(self.get_state())
+        self.history_control.append(u_optimal_mp)
+
 
 
     def simulate(self, dt):
