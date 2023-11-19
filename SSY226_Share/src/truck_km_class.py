@@ -9,7 +9,8 @@ from car_km_class import Car_km
 
 import warnings
 warnings.simplefilter("error")
-
+nt=4
+L=4
 class Truck_CC(Car_km):
     def __init__(self, state, dt):
         super().__init__(state, dt)
@@ -81,7 +82,7 @@ class Truck_CC(Car_km):
         e[1] = self.state[C.S] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.S::(self.nx+self.nu)],kind='cubic')(t)
         e[2] = self.state[C.N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.N::(self.nx+self.nu)],kind='cubic')(t)
         e[3] = self.state[C.V_N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_N::(self.nx+self.nu)],kind='cubic')(t)
-        u=self.compute_MPC(dt, e, 30)
+        u = -np.matmul(self.R,e)
         a_n = u[1]
         
         # Trajectory following using CC

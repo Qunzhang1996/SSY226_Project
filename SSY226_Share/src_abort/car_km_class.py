@@ -8,19 +8,18 @@ from vehicle_class import C, ST,C_k,Vehicle
 # from kinematic_test import VehicleKinematic
 import warnings
 warnings.simplefilter("error")
-
+nt=4
+L=4
 
 #TODO:addparser!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #parser!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 class Car_km(Vehicle):
-    def __init__(self, state, dt,nt=4,L=4):
-        self.nt=nt
+    def __init__(self, state, dt):  
         super().__init__(state)
-        self.L=L
         self.nx = 5
         self.nu = 2
         self.state = np.zeros(self.nx)
-        self.state[:self.nt] = state
+        self.state[:nt] = state
         self.state[C_k.V_km] = 0
         self.u=np.zeros(self.nu)
         self.desired_XU0 = None
@@ -64,7 +63,7 @@ class Car_km(Vehicle):
         self.dt = dt
 
     def get_state(self):
-        return self.state[:self.nt]
+        return self.state[:nt]
 
     def create_car_F(self):  # create a discrete model of the vehicle
         nx = self.nx
@@ -106,7 +105,7 @@ class Car_km(Vehicle):
         a_km, delta = u[0], u[1]
         dot_x_km = v_km*np.cos(psi)
         dot_y_km = v_km*np.sin(psi)
-        dot_psi = v_km/self.L*np.tan(delta)
+        dot_psi = v_km/L*np.tan(delta)
         dot_t = 1
         dot_v_km = a_km
         dot_x = cs.vertcat(dot_x_km, dot_y_km, dot_psi, dot_t, dot_v_km)

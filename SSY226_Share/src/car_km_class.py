@@ -8,16 +8,15 @@ from vehicle_class import C, ST,C_k,Vehicle
 # from kinematic_test import VehicleKinematic
 import warnings
 warnings.simplefilter("error")
-
+nt=4
+L=4
 class Car_km(Vehicle):
-    def __init__(self, state, dt,nt=4,L=4):
+    def __init__(self, state,dt, state_km=np.zeros(5)):
         super().__init__(state)
-        self.nt=nt
-        self.L = L
         self.nx = 5
         self.nu = 2
         self.state = np.zeros(self.nx)
-        self.state[:self.nt] = state
+        self.state[:nt] = state
         self.state[C.V_N] = 0
         self.desired_XU0 = None
         self.v0 = 25
@@ -41,11 +40,11 @@ class Car_km(Vehicle):
         # self.n_points_match = 5
         self.n_points_match = 1
         self.P_road_v = [0] * 8
-        self.q = np.diag([1,100,100,1])
-        self.r = np.diag([1,1])*0.1
+        self.q = np.diag([10,10,0.1,0.01])
+        self.r = np.diag([1,1])
         self.create_car_F()
         self.dt_factor = 30
-        # self.compute_K(dt)
+        self.compute_K(dt)
         self.create_opti()
         self.v_p_weight_P_paths = [0, 0]
         self.history_planned_control = []
@@ -53,10 +52,12 @@ class Car_km(Vehicle):
         self.dt = dt
         #TODO: add the following two lines with the update of the km of state and input
         #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        self.state_km = np.zeros(self.nx)
+        self.u_km = np.zeros(self.nu)
         
         
     def get_state(self):
-        return self.state[:self.nt]
+        return self.state[:nt]
 
     def create_car_F(self):  # create a discrete model of the vehicle
         nx = self.nx
@@ -311,10 +312,6 @@ class Car_km(Vehicle):
             old_tt = self.planned_trajectory[C.T, :]
             new_tt = [self.state[C.T] + self.planning_dt *
                       i for i in range(self.planning_points)]
-
-            print('this is time')
-            print(old_tt)
-            print(new_tt)
             for i in range(self.nx):
                 local_XU_0[i::(self.nx+self.nu)] = scipy.interpolate.interp1d(
                     old_tt, self.planned_XU0[i::(self.nx+self.nu)], fill_value='extrapolate', kind='cubic')(new_tt)
@@ -432,7 +429,7 @@ class Car_km(Vehicle):
         a_km, delta = u[0], u[1]
         dot_x_km = v_km*np.cos(psi)
         dot_y_km = v_km*np.sin(psi)
-        dot_psi = v_km/self.L*np.tan(delta)
+        dot_psi = v_km/L*np.tan(delta)
         dot_t = 1
         dot_v_km = a_km
         dot_x = cs.vertcat(dot_x_km, dot_y_km, dot_psi, dot_t, dot_v_km)
@@ -444,7 +441,7 @@ class Car_km(Vehicle):
         k4 = f(x+dt*k3, u)
         x_kp1 = x+dt/6*(k1+2*k2+2*k3+k4)
         F = cs.Function('F', [x, u, dt], [x_kp1])  # x_k+1 = F(x_k, u_k, dt)
-        self.car_F = F  # save the vehicle model in the object variable
+        self.car_F_km = F  # save the vehicle model in the object variable
         self.K_dot_x = cs.vertcat(dot_x_km, dot_y_km, dot_psi, dot_v_km)
         self.K_x = cs.vertcat(x_km, y_km, psi, v_km)
         self.K_u = cs.vertcat(a_km, delta)
@@ -455,8 +452,8 @@ class Car_km(Vehicle):
         nx = self.nx
         nu = self.nu
         nx = nx - 1
-        x_op = self.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km ]]
-        u_op = self.u
+        x_op = self.state_km[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km ]]
+        u_op = self.u_km
         self.create_car_F_km()
         # self.create_car_F_km()
         # Define state and control symbolic variables
@@ -490,12 +487,10 @@ class Car_km(Vehicle):
         from scipy import linalg as la
         P = la.solve_discrete_are(a, b, self.q, self.r)
         R = la.solve(self.r + b.T.dot(P).dot(b), b.T.dot(P).dot(a))
-        self.R = R
-        self.P=P
         return R
 
 
-    def compute_km_mpc(self,error0, N=10):
+    def compute_km_mpc(self,error0, N=60):
         nx = self.nx
         nu = self.nu
         nx = nx - 1
@@ -520,8 +515,8 @@ class Car_km(Vehicle):
         opti.subject_to(X[:, 0] == error0)
         # Control input constraints
         # Control input constraints
-        u_min = [-5, -np.pi / 3]
-        u_max = [5, np.pi / 3]
+        u_min = [-5, -np.pi / 6]
+        u_max = [5, np.pi / 6]
 
         for j in range(nu):
             opti.subject_to(opti.bounded(u_min[j], U[j, :], u_max[j]))
@@ -563,7 +558,7 @@ class Car_km(Vehicle):
 
 
     # here is the transformation between mass_point and km state
-    def transformation_mp2km(self, state):
+    def transformation_km2mp(self, state):
         """Transfer from  km state to mass_point state"""
         x_km, y_km, psi, t, v_km = state[0], state[1], state[2], state[3], state[4]
         x = x_km
@@ -576,7 +571,7 @@ class Car_km(Vehicle):
         n=y
         return np.array([v_s, s, n, t, v_n])
     
-    def transformation_km2mp(self, state):
+    def transformation_mp2km(self, state):
         """Transfer from mass_point to km state"""
         v_s, s, n, t, v_n = state[0], state[1], state[2], state[3], state[4]
         x_km = s
@@ -597,21 +592,31 @@ class Car_km(Vehicle):
         ax, ay = u[0], u[1]
         a = np.sqrt(ax**2+ay**2)
         delta = np.arctan2(ay, ax)
+        if delta > np.pi/2:
+            delta = delta - np.pi
+        elif delta < -np.pi/2:
+            delta = delta + np.pi
         return np.array([a, delta])
 
 
 
 
-    def simulate_km(self, dt):
+    def simulate(self, dt, outside_carla_state=np.zeros([5,1])):
         """compute new state in simulation, transfer from mass_point to km state
         and transfer from km state to mass_point state"""
 
+        #To test, try to transform the pm state to km state
+        outside_carla_state=self.transformation_mp2km(self.state).reshape(-1,1)
+
+
         #TODO: add the carla state
         state_carla=np.zeros([5,1])#"represent this with the state from Carla"   X, Y, PSI, T, V
+        state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.T, C_k.V_km]]=outside_carla_state
         state_mp_planned=np.zeros([self.nx,1])
         tt = self.planned_trajectory[C.T, :]
         t = self.state[C.T]
         state_carla[C_k.T]=t
+        
         #get target point of mass_point
         state_mp_planned[C.V_S] = scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_S::(self.nx+self.nu)],kind='cubic')(t)
         state_mp_planned[C.S]= scipy.interpolate.interp1d(tt,self.planned_XU0[C.S::(self.nx+self.nu)],kind='cubic')(t)
@@ -625,6 +630,9 @@ class Car_km(Vehicle):
         if state_carla[C_k.V_km]==0:
             state_carla[C_k.V_km]=0.001
 
+        #input the state of carla vehicle to state_km to calculate a,b and mpc
+        self.state_km=state_carla
+
         #calculate the error
         e=np.zeros([self.nx-1,1])
         e[0]=state_carla[C_k.X_km]-state_km_planned[C_k.X_km]
@@ -634,15 +642,20 @@ class Car_km(Vehicle):
 
         #make sure the heading error is in the range of [-pi,pi]
         e[2]=np.arctan2(np.sin(e[2]),np.cos(e[2]))
-        
+        # print('this is error', e)
         #calculate the input through MPC
         #TODO:have to check the update in the code above AB Calculation
         u_optimal=self.compute_km_mpc(e)
+        # R=self.compute_km_K()
+        # u_optimal=-np.matmul(R,e)
+
+        self.u_km=u_optimal
         #TODO:output the input of the km vehicle to the carla vehicle
         #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         
         #transfer from km input to mass_point input
-        u_optimal_mp=self.input_transform_inv(u_optimal)
+        u_optimal_mp=self.input_transform(u_optimal)
+        print('this is u_optimal_mp', u_optimal_mp)
         #transfer carla state to mp state
         state_mp_carla=self.transformation_km2mp(state_carla)
 
@@ -653,17 +666,17 @@ class Car_km(Vehicle):
 
 
 
-    def simulate(self, dt):
-        """Compute new state in simulation"""
-        # Trajectory following using LQR
-        e = np.zeros([self.nx-1,1])
-        tt = self.planned_trajectory[C.T, :]
-        t = self.state[C.T]
-        e[0] = self.state[C.V_S] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_S::(self.nx+self.nu)],kind='cubic')(t)
-        e[1] = self.state[C.S] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.S::(self.nx+self.nu)],kind='cubic')(t)
-        e[2] = self.state[C.N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.N::(self.nx+self.nu)],kind='cubic')(t)
-        e[3] = self.state[C.V_N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_N::(self.nx+self.nu)],kind='cubic')(t)
-        u = -np.matmul(self.R,e)
-        self.state = self.car_F(self.state, u, dt).full().ravel()
-        self.history_state.append(self.get_state())
-        self.history_control.append(u)
+    # def simulate(self, dt):
+    #     """Compute new state in simulation"""
+    #     # Trajectory following using LQR
+    #     e = np.zeros([self.nx-1,1])
+    #     tt = self.planned_trajectory[C.T, :]
+    #     t = self.state[C.T]
+    #     e[0] = self.state[C.V_S] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_S::(self.nx+self.nu)],kind='cubic')(t+0.5)
+    #     e[1] = self.state[C.S] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.S::(self.nx+self.nu)],kind='cubic')(t+0.5)
+    #     e[2] = self.state[C.N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.N::(self.nx+self.nu)],kind='cubic')(t+0.5)
+    #     e[3] = self.state[C.V_N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_N::(self.nx+self.nu)],kind='cubic')(t+0.5)
+    #     u = -np.matmul(self.R,e)
+    #     self.state = self.car_F(self.state, u, dt).full().ravel()
+    #     self.history_state.append(self.get_state())
+    #     self.history_control.append(u)

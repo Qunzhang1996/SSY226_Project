@@ -58,6 +58,7 @@ def main():
     # Create a twin vehicle inside v2 with the current state, CAV
     v2.add_vehicle_twin('v1', v1_state)
 
+
     for _ in range(replanning_iterations):
 
         # Compute planned and desired trajectories
@@ -138,3 +139,62 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+    # plt.ion()
+
+    # for _ in range(replanning_iterations):
+    #     # ... 计算规划和期望轨迹的代码 ...
+
+    #     # 模拟所有车辆
+    #     for _ in range(steps_between_replanning):
+    #         for v in [v1, v2]:
+    #             v.simulate(dt)
+
+    #             # 读取所有车辆的状态
+    #             v1_state = v1.get_state()
+    #             v2_state = v2.get_state()
+
+    #             # 更新内部双车辆状态
+    #             v1.update_twin_state('v2', v2_state)
+    #             v2.update_twin_state('v1', v1_state)
+
+    #             # 绘图部分
+    #             plt.clf()  # 清除整个图形
+
+    #             # 绘制道路
+    #             plt.subplot(2, 1, 1)
+    #             plt.title("Road and Vehicle Trajectories")
+    #             ss = np.linspace(-900, 2000, 1000)
+    #             road_right = P_road_v[0]/2 * (np.tanh(P_road_v[1]*(ss-P_road_v[2]))+1)+P_road_v[3]
+    #             road_left = P_road_v[4]/2*(np.tanh(P_road_v[5]*(ss-P_road_v[6]))+1)+P_road_v[7]
+    #             plt.plot(ss, road_right, 'k', label='Right Edge of Road')
+    #             plt.plot(ss, road_left, 'k', label='Left Edge of Road')
+
+    #             # 绘制车辆当前位置和轨迹
+    #             v1_history_state = np.array(v1.history_state).T
+    #             v2_history_state = np.array(v2.history_state).T
+    #             plt.plot(v1_history_state[ST.S], v1_history_state[ST.N], label='Vehicle 1 Trajectory')
+    #             plt.plot(v2_history_state[ST.S], v2_history_state[ST.N], label='Vehicle 2 Trajectory')
+    #             plt.scatter(v1_history_state[ST.S][-1], v1_history_state[ST.N][-1], color='blue')
+    #             plt.scatter(v2_history_state[ST.S][-1], v2_history_state[ST.N][-1], color='red')
+
+    #             plt.legend()
+    #             plt.xlabel("S-axis")
+    #             plt.ylabel("N-axis")
+
+    #             # 绘制车辆速度
+    #             plt.subplot(2, 1, 2)
+    #             plt.title("Vehicle Speeds")
+    #             plt.plot(v1_history_state[ST.S], v1_history_state[ST.V], label='Vehicle 1 Speed')
+    #             plt.plot(v2_history_state[ST.S], v2_history_state[ST.V], label='Vehicle 2 Speed')
+    #             plt.legend()
+    #             plt.xlabel("S-axis")
+    #             plt.ylabel("Speed")
+
+    #             plt.pause(0.01)  # 稍微暂停，以便观察更新
+
+    # plt.ioff()  # 关闭交互模式
+    # plt.show()

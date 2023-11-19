@@ -9,7 +9,7 @@ from car_km_class import Car_km
 
 import warnings
 warnings.simplefilter("error")
-
+nt=4
 class Truck_CC(Car_km):
     def __init__(self, state, dt):
         super().__init__(state, dt)

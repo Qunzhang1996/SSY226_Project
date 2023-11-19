@@ -238,7 +238,7 @@ class Car(Vehicle):
         n = XU[2::(nx+nu)]
         t = XU[3::(nx+nu)]
         v_n = XU[4::(nx+nu)]
-        a_s = XU[5::(nx+nu)]
+        a_s = XU[5::(nx+nu)]L/2
         a_n = XU[6::(nx+nu)]
         X = cs.vertcat(v_s, s, n, t, v_n)
         U = cs.vertcat(a_s, a_n)
@@ -317,6 +317,7 @@ class Car(Vehicle):
         opti_options['print_time'] = False
         # opti_options['ipopt.linear_solver'] = "ma57" # needs to be requested and installed separately
         opti_options['ipopt.sb'] = 'yes'
+    
         opti.solver("ipopt", opti_options)
 
         # Create a parameterized function to solve the optimization problem
@@ -390,8 +391,6 @@ class Car(Vehicle):
             
         else:
             x0 = self.state
-        # print('this is x0')
-        # print(x0)
         print(self.name, 'current/projected state for s', self.state[C.S], x0[C.S])
         print(self.name, 'current/projected state for v_s', self.state[C.V_S], x0[C.V_S])
 

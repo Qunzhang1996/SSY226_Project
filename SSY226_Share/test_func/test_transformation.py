@@ -28,6 +28,7 @@ class TransformationTest:
         a, delta = u[0], u[1]
         ax = a*np.cos(delta)
         ay = a*np.sin(delta)
+        print(np.array([ax, ay]))
         return np.array([ax, ay])
     
     def input_transform_inv(self, u):
@@ -35,13 +36,14 @@ class TransformationTest:
         ax, ay = u[0], u[1]
         a = np.sqrt(ax**2+ay**2)
         delta = np.arctan2(ay, ax)
+        print(np.array([a, delta]))
         return np.array([a, delta])
     
 
     def test_transformation(self):
         # Initial km state
         initial_state_km = np.array([10, 20, np.pi/4, 5, 30])  # Example values
-        initial_input_km = np.array([1, np.pi/4])
+        initial_input_km = np.array([0.06405456, 0.00018099])
         # Convert km to mp and back to km
         state_mp = self.transformation_km2mp(initial_state_km)
         final_state_km = self.transformation_mp2km(state_mp)
