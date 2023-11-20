@@ -8,6 +8,25 @@ import warnings
 import sys
 sys.path.append('/home/zq/Desktop/SSY226_Project')
 from SSY226_Share.src.vehicle_class import C, ST, C_k, Vehicle
+#define kalman filter class
+class ExtendedKalmanFilter:
+    def __init__(self, H, Q, R, x0, P0):
+        self.H = H  # Observation matrix
+        self.Q = Q  # Process noise covariance
+        self.R = R  # Measurement noise covariance
+        self.x = x0  # Initial state estimate
+        self.P = P0  # Initial covariance estimate
+
+    def predict(self, A, B, u):
+        self.x = np.dot(A, self.x) + np.dot(B, u)  # State prediction using AX + BU
+        self.P = np.dot(A, np.dot(self.P, A.T)) + self.Q  # Covariance prediction
+
+
+    def update(self, z):
+        K = np.dot(self.P, np.dot(self.H.T, np.linalg.inv(np.dot(self.H, np.dot(self.P, self.H.T)) + self.R)))
+        self.x = self.x + np.dot(K, (z - np.dot(self.H, self.x)))
+        self.P = self.P - np.dot(K, np.dot(self.H, self.P))
+
 
 class Car_km():
     def __init__(self, state, dt=0.1, nt=4, L=4):
@@ -52,6 +71,8 @@ class Car_km():
         x_kp1 = x + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
         F = cs.Function('F', [x, u, dt], [x_kp1])  # x_k+1 = F(x_k, u_k, dt)
         self.car_F = F  # Save the vehicle model in the object variable
+
+
         self.K_dot_x = cs.vertcat(dot_x_km, dot_y_km, dot_psi, dot_v_km)
         self.K_x = cs.vertcat(x_km, y_km, psi, v_km)
         self.K_u = cs.vertcat(a_km, delta)
@@ -97,7 +118,7 @@ class Car_km():
         self.P = P
         return R
 
-    def compute_km_mpc(self, error0, N=10):
+    def compute_km_mpc(self, error0, N=100):
         nx = self.nx
         nu = self.nu
         nx = nx - 1
@@ -196,8 +217,21 @@ car = Car_km(state=np.array([0, 0, 0, 5]))
 # Store the car's trajectory
 trajectory = []
 last_index = 0
+
+# define the noise level
+noise_level = 0.5
+
+#initialize the kalman filter
+H = np.eye(car.nx-1)  # Observation matrix
+Q= noise_level**2 * np.eye(car.nx-1)
+R = 0.01*noise_level**2 * np.eye(car.nx-1)  # Measurement noise covariance
+x0 = np.array([0, 0, 0, 5])  # Initial state estimate
+P0 = np.eye(car.nx-1)  # Initial covariance estimate
+ekf = ExtendedKalmanFilter(H, Q, R, x0, P0)
+u_optimal=np.zeros(2)
+
 # Run MPC for each reference point
-for i in range(len(x_ref)):
+for i in range(len(x_ref)+30):
     plt.cla()
     # Set reference state (x, y, psi, v)
     # current_position = np.array([x_ref[i], y_ref[i]])  # Assuming reference speed is 10 m/s
@@ -206,7 +240,37 @@ for i in range(len(x_ref)):
     target_point, target_idx = find_target_point(ref_points, current_position, 1, last_index)
     last_index = target_idx
     ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 10])
+    
+    #start to get measurement
+    # 计算当前时间步的 A 矩阵
+    A, B = car.calculate_AB(car.dt)
+
+
+    #here, inputting white noise into the car state
+    car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] += np.random.normal(0, noise_level, 4)
+    # 添加测量噪声
+    measurement_noise = np.random.normal(0, 0.1*noise_level, 4)
+    # print(measurement_noise.shape)
+    # exit()
+    noisy_measurement = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] + measurement_noise
+    
+
+
+    #do kalman filter
+    # 扩展卡尔曼滤波器的预测步骤
+    ekf.predict(A, B, u_optimal)
+
+    # 扩展卡尔曼滤波器的更新步骤
+    ekf.update(noisy_measurement)
+
+    # 使用扩展卡尔曼滤波器的状态估计
+    car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] = ekf.x
+    
+    
+    
     # Calculate error
+    
+
     car.state[C_k.Psi]=np.arctan2(np.sin(car.state[C_k.Psi]),np.cos(car.state[C_k.Psi]))
     error = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]-ref_state
     heading_error=np.arctan2(np.sin(error[2]),np.cos(error[2]))
@@ -221,6 +285,9 @@ for i in range(len(x_ref)):
     # Update car state
     print("car_state",car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]])
     car.state = car.car_F(car.state, u_optimal, car.dt).full().flatten()
+
+
+    
 
     # # Add time state
     # car.state[C_k.T] += car.dt

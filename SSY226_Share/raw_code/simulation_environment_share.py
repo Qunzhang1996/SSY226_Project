@@ -238,7 +238,7 @@ class Car(Vehicle):
         n = XU[2::(nx+nu)]
         t = XU[3::(nx+nu)]
         v_n = XU[4::(nx+nu)]
-        a_s = XU[5::(nx+nu)]L/2
+        a_s = XU[5::(nx+nu)]
         a_n = XU[6::(nx+nu)]
         X = cs.vertcat(v_s, s, n, t, v_n)
         U = cs.vertcat(a_s, a_n)
