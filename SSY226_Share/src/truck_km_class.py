@@ -10,7 +10,7 @@ from car_km_class import Car_km
 import warnings
 warnings.simplefilter("error")
 nt=4
-L=4
+L=8.47
 class Truck_CC(Car_km):
     def __init__(self, state, dt):
         super().__init__(state, dt)
@@ -68,7 +68,19 @@ class Truck_CC(Car_km):
         self.v_ref = res.x 
     
     
-    def simulate(self, dt):
+    def simulate(self, dt,outside_carla_state=np.zeros([5,1])):
+
+        #To test, try to transform the pm state to km state
+        # print('this is the state', self.state)
+        outside_carla_state=self.transformation_mp2km(self.state).reshape(-1,1)
+        # print('this is the state in km', outside_carla_state)
+
+        #transfer the state from Carla to pm
+        self.state=self.transformation_km2mp(outside_carla_state).ravel()
+        # print('this is the state in pm', self.state)
+        # exit()
+
+
         if self.counter_cc_replanning == 0:
             self.compute_v_ref()
             self.counter_cc_replanning = self.steps_between_cc_replanning
@@ -110,7 +122,14 @@ class Truck_CC(Car_km):
             dvdt = a_free+self.a*(1-z**2) if z >= 1 else a_free
         a_s = dvdt
         u = [a_s, a_n]
+
+
+        #to get the optimal control input of the truck, using transformation_inv
+        u_optimal_km=self.input_transform_inv(u).reshape(-1,1)
+        print('this is the optimal control input of the truck', u_optimal_km)
+
         self.state = self.car_F(self.state, u, dt).full().ravel()
+
         self.history_state.append(self.get_state())
         self.history_control.append(u)
         self.history_v_ref.append(self.v_ref)

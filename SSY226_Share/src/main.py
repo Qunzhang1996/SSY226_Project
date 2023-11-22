@@ -137,8 +137,7 @@ def main():
     plt.show()
 
 
-if __name__ == "__main__":
-    main()
+
 
 
 
@@ -198,3 +197,7 @@ if __name__ == "__main__":
 
     # plt.ioff()  # 关闭交互模式
     # plt.show()
+
+
+if __name__ == "__main__":
+    main()

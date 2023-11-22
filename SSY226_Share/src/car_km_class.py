@@ -5,11 +5,12 @@ import scipy
 import casadi as cs
 from enum import IntEnum
 from vehicle_class import C, ST,C_k,Vehicle
+# from kalmanfilter import ExtendedKalmanFilter
 # from kinematic_test import VehicleKinematic
 import warnings
 warnings.simplefilter("error")
 nt=4
-L=4
+L=4.89
 class Car_km(Vehicle):
     def __init__(self, state,dt, state_km=np.zeros(5)):
         super().__init__(state)
@@ -663,7 +664,6 @@ class Car_km(Vehicle):
         self.state = self.car_F(state_mp_carla, u_optimal_mp, dt).full().ravel()
         self.history_state.append(self.get_state())
         self.history_control.append(u_optimal_mp)
-
 
 
     # def simulate(self, dt):
