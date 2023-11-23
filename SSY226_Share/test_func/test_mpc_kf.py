@@ -18,6 +18,8 @@ class ExtendedKalmanFilter:
         self.P = P0  # Initial covariance estimate
 
     def predict(self, A, B, u):
+        print('this is A dot', np.dot(A, self.x))
+        print('this is B dot', np.dot(B, u))
         self.x = np.dot(A, self.x) + np.dot(B, u)  # State prediction using AX + BU
         self.P = np.dot(A, np.dot(self.P, A.T)) + self.Q  # Covariance prediction
 
@@ -26,6 +28,7 @@ class ExtendedKalmanFilter:
         K = np.dot(self.P, np.dot(self.H.T, np.linalg.inv(np.dot(self.H, np.dot(self.P, self.H.T)) + self.R)))
         self.x = self.x + np.dot(K, (z - np.dot(self.H, self.x)))
         self.P = self.P - np.dot(K, np.dot(self.H, self.P))
+
 
 
 class Car_km():
@@ -37,14 +40,9 @@ class Car_km():
         self.state[:nt] = state
         self.state[C_k.V_km] = 0
         self.u = np.zeros(self.nu)
-        self.v0 = 10
-        self.planning_points = 31
         self.q = np.diag([10.0, 10.0, 0.1, 0.01])
-        self.P=self.q
         self.r = np.diag([1, 1]) 
         self.dt = dt
-        self.dt_factor = 30
-        # self.setup_Op_MPC()
 
     def create_car_F_km(self):  # Create a discrete model of the vehicle
         nx = self.nx
@@ -107,7 +105,7 @@ class Car_km():
         newA = A_op * dt_sim + np.eye(self.nx-1)
         newB = B_op * dt_sim
 
-        return newA.full(), newB.full()
+        return newA, newB
     
     def compute_km_K(self):
         a, b = self.calculate_AB(self.dt)
@@ -118,45 +116,68 @@ class Car_km():
         self.P = P
         return R
 
-    def compute_km_mpc(self, error0, N=100):
+    def compute_km_mpc(self, state, error0, N=10):
         nx = self.nx
         nu = self.nu
         nx = nx - 1
         a, b = self.calculate_AB(self.dt)
         from scipy import linalg as la
-        # Setup the optimization problem
-        opti = cs.Opti()  # Create a QP problem
+        # Create a QP problem
+        opti = cs.Opti()  
+        state_prej = state
         # Decision variables for state and input
-        X = opti.variable(nx, N+1)  
-        U = opti.variable(nu, N)  
+        X = opti.variable(nx, N+1)
+        U = opti.variable(nu, N)
+        
         # Objective function
         obj = 0  # Initiate objective function
         for i in range(N):
             obj += cs.mtimes([X[:, i].T, self.q, X[:, i]])  # State cost
             obj += cs.mtimes([U[:, i].T, self.r, U[:, i]])  # Control cost
+        
         # Add the objective function to the optimization problem
         opti.minimize(obj)
+        
         # Constraints
         for i in range(N):
             opti.subject_to(X[:, i+1] == cs.mtimes(a, X[:, i]) + cs.mtimes(b, U[:, i]))
+        
         # Initial constraints
         opti.subject_to(X[:, 0] == error0)
+        
         # Control input constraints
-        u_min = [-5, -np.pi / 3]
-        u_max = [5, np.pi / 3]
-
+        u_min = [-5, -np.pi / 6]
+        u_max = [5, np.pi / 6]
         for j in range(nu):
             opti.subject_to(opti.bounded(u_min[j], U[j, :], u_max[j]))
+        
         # Configure the solver
         opts = {"ipopt.print_level": 0, "print_time": 0}
         opti.solver('ipopt', opts)
 
-        # Solve the optimization problem
-        sol = opti.solve()
+        # Initialize lists to store predicted trajectories and optimal control inputs
+        predicted_trajectories = []
+        u_optimal_list = []
 
-        # Get the optimal control input sequence
-        u_optimal = sol.value(U[:, 0])
-        return u_optimal
+        # Solve the optimization problem for each time step
+        for i in range(N):
+            # Solve the optimization problem
+            sol = opti.solve()
+            
+            # Get the optimal control input for this time step
+            u_optimal = sol.value(U[:, i])
+            u_optimal_list.append(u_optimal)
+            
+            # Calculate and store the predicted state trajectory for this time step
+            predicted_state = self.car_F(state_prej, u_optimal, self.dt).full().flatten()
+            predicted_trajectories.append(predicted_state.copy())
+            
+            # Update the initial error for the next time step
+            state_prej = predicted_state
+
+        return u_optimal_list, predicted_trajectories
+
+
     
 def find_target_point(trajectory, point, shift_points, last_index=0):
     # Calculate the squared Euclidean distance to each point in the trajectory
@@ -200,7 +221,7 @@ def plot_car_direction(ax, car_state, arrow_length=2.0):
     ax.arrow(x_arrow, y_arrow, dx_arrow, dy_arrow, head_width=0.5, head_length=0.5, fc='green', ec='green')
 
 # Generate the reference curve
-x_ref, y_ref = generate_curve(A=10, B=0.1, x_max=100)
+x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=100)
 
 # concate x_ref and y_ref as 2d array, shape of (N,2)
 ref_points = np.vstack([x_ref, y_ref]).T
@@ -210,96 +231,115 @@ target_point, target_idx = find_target_point(ref_points, np.array(x_ref[0], y_re
 
 
 # Initialize car model
-car = Car_km(state=np.array([0, 0, 0, 5]))
+car = Car_km(state=np.array([0, 0,np.pi/4, 5]))
 
 # Store the car's trajectory
 trajectory = []
 last_index = 0
 
-# define the noise level
-noise_level = 0.0005
+u_optimal=np.zeros(2)
 
+# define the car as a rectangle
+# Plot the car as a rectangle
+car_length = 4.0  # Define the car's length
+car_width = 1.0   # Define the car's width
+
+
+noise_level=0.1
 #initialize the kalman filter
 H = np.eye(car.nx-1)  # Observation matrix
 Q= noise_level**2 * np.eye(car.nx-1)
 R = 0.01*noise_level**2 * np.eye(car.nx-1)  # Measurement noise covariance
-x0 = np.array([0, 0, 0, 5])  # Initial state estimate
+x0 = np.array([0, 0, np.pi/4, 5])  # Initial state estimate
 P0 = np.eye(car.nx-1)  # Initial covariance estimate
 ekf = ExtendedKalmanFilter(H, Q, R, x0, P0)
 u_optimal=np.zeros(2)
 
-# Run MPC for each reference point
-for i in range(len(x_ref)+30):
+
+
+
+
+plt.ion()
+
+for i in range(len(x_ref) + 10):
     plt.cla()
-    # Set reference state (x, y, psi, v)
-    # current_position = np.array([x_ref[i], y_ref[i]])  # Assuming reference speed is 10 m/s
     current_position = car.state[[C_k.X_km, C_k.Y_km]]
 
     target_point, target_idx = find_target_point(ref_points, current_position, 1, last_index)
     last_index = target_idx
     ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 10])
-    
     #start to get measurement
-    # 计算当前时间步的 A 矩阵
+    # calculate the A B matrix of current time step
     A, B = car.calculate_AB(car.dt)
+
+    print('this is A', A)
+    print('this is B', B)
 
 
     #here, inputting white noise into the car state
     car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] += np.random.normal(0, noise_level, 4)
-    # 添加测量噪声
+    # add the measurement noise
     measurement_noise = np.random.normal(0, 0.1*noise_level, 4)
-    # print(measurement_noise.shape)
-    # exit()
     noisy_measurement = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] + measurement_noise
+    print('this is u_optimal', u_optimal)
     
+
 
 
     #do kalman filter
-    # 扩展卡尔曼滤波器的预测步骤
     ekf.predict(A, B, u_optimal)
-
-    # 扩展卡尔曼滤波器的更新步骤
+    
     ekf.update(noisy_measurement)
+    
 
-    # 使用扩展卡尔曼滤波器的状态估计
     car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] = ekf.x
-    
-    
-    
-    # Calculate error
-    
 
-    car.state[C_k.Psi]=np.arctan2(np.sin(car.state[C_k.Psi]),np.cos(car.state[C_k.Psi]))
-    error = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]-ref_state
-    heading_error=np.arctan2(np.sin(error[2]),np.cos(error[2]))
-    error[2]=heading_error
-    print('error: ', error)
-    if car.state[C_k.V_km]==0:
-        car.state[C_k.V_km]=0.01
-    # Compute optimal control input
-    u_optimal = car.compute_km_mpc(error)
-    print('u_optimal',u_optimal)
 
+    # keep the heading angle between -pi and pi
+    car.state[C_k.Psi] = np.arctan2(np.sin(car.state[C_k.Psi]), np.cos(car.state[C_k.Psi]))
+    #calculate the error
+    error = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
+    #keep the heading angle between -pi and pi
+    heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
+    error[2] = heading_error
+    
+    
+    #make sure the velocity is not zero
+    if car.state[C_k.V_km] == 0:
+        car.state[C_k.V_km] = 0.01
+
+    # Call compute_km_mpc to get both u_optimal and predicted_trajectories
+    u_optimal_list, predicted_trajectories = car.compute_km_mpc(car.state, error)
+    u_optimal = u_optimal_list[0]
+
+    # Visualize the predicted trajectories
+    predicted_trajectories = np.array(predicted_trajectories)
+
+    # Plot the reference trajectory
+    plt.plot(x_ref, y_ref)
+
+    # Plot the predicted trajectories using vectorized plot
+    plt.plot(*predicted_trajectories[:, [C_k.X_km, C_k.Y_km]].T, '-', color='red')
+
+    # Plot the car
+    car_x = car.state[C_k.X_km] - 0.5 * car_length * np.cos(car.state[C_k.Psi])
+    car_y = car.state[C_k.Y_km] - 0.5 * car_length * np.sin(car.state[C_k.Psi])
+    car_angle = np.degrees(car.state[C_k.Psi])
+    car_rect = plt.Rectangle((car_x, car_y), car_length, car_width, angle=car_angle, edgecolor='blue', facecolor='none')
+    plt.gca().add_patch(car_rect)
+    
     # Update car state
-    print("car_state",car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]])
     car.state = car.car_F(car.state, u_optimal, car.dt).full().flatten()
 
-
-    
-
-    # # Add time state
-    # car.state[C_k.T] += car.dt
-    plt.plot(current_position[0], current_position[1], 'o', color='blue')
-    plt.plot(x_ref, y_ref)
-    plt.scatter(target_point[0], target_point[1], color='red')
-    plot_car_direction(plt, car.state)
     plt.axis("equal")
     plt.pause(0.1)
-    # Record current state
     trajectory.append(car.state.copy())
+
+plt.ioff()
 
 # Convert trajectory to NumPy array
 trajectory = np.array(trajectory)
+
 
 # Visualize results
 plt.figure(figsize=(12, 6))
@@ -312,3 +352,7 @@ plt.legend()
 plt.axis("equal")
 plt.grid(True)
 plt.show()
+
+
+
+
