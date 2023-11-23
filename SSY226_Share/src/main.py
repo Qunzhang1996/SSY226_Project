@@ -25,14 +25,14 @@ def main():
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([25, -416.25-70, 0, 0],dt=dt)
+    v1 = Truck_CC([25, -416.25+200, 0, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
     # Only used for Car (CAV)
     P_road_v = [lane_width, 0.1, 80, -1.5*lane_width,
                 lane_width, 0.1, 0, -0.5*lane_width]
-    v2 = Car_km([19, -397.53, -lane_width, 0],dt=dt)
+    v2 = Car_km([19, -397.53+300, -lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'

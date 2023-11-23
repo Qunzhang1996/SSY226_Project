@@ -581,7 +581,45 @@ class Car_km(Vehicle):
         v_km = np.sqrt(v_s**2+v_n**2)
         return np.array([x_km, y_km, psi, t, v_km])
 
-    def input_transform(self, u):
+    def input_transform(s#define kalman filter class
+# class ExtendedKalmanFilter:
+#     def __init__(self, H, Q, R, x0, P0):
+#         self.H = H  # Observation matrix
+#         self.Q = Q  # Process noise covariance
+#         self.R = R  # Measurement noise covariance
+#         self.x = x0  # Initial state estimate
+#         self.P = P0  # Initial covariance estimate
+#         self.K_prev = None  # Store previous Kalman gain
+#         self.K_converged = False
+
+#     def predict(self, A, B, u):
+#         print('this is A dot', np.dot(A, self.x))
+#         print('this is B dot', np.dot(B, u))
+#         self.x = np.dot(A, self.x) + np.dot(B, u)  # State prediction using AX + BU
+#         self.P = np.dot(A, np.dot(self.P, A.T)) + self.Q  # Covariance prediction
+
+
+#     def update(self, z, convergence_threshold=1e-4):
+#         K = np.dot(self.P, np.dot(self.H.T, np.linalg.inv(np.dot(self.H, np.dot(self.P, self.H.T)) + self.R)))
+        
+#         # Check for convergence of K
+#         if self.K_prev is not None:
+#             if np.linalg.norm(K - self.K_prev) < convergence_threshold:
+#                 self.K_converged = True
+
+#         # Update state and covariance
+#         self.x = self.x + np.dot(K, (z - np.dot(self.H, self.x)))
+#         self.P = self.P - np.dot(K, np.dot(self.H, self.P))
+
+#         # Update previous Kalman gain
+#         self.K_prev = K
+
+#         return self.K_converged
+
+    # def update(self, z):
+    #     K = np.dot(self.P, np.dot(self.H.T, np.linalg.inv(np.dot(self.H, np.dot(self.P, self.H.T)) + self.R)))
+    #     self.x = self.x + np.dot(K, (z - np.dot(self.H, self.x)))
+    #     self.P = self.P - np.dot(K, np.dot(self.H, self.P)) elf, u):
         """Transfer from km input to mass_point input, a, delta to ax,ay"""
         a, delta = u[0], u[1]
         ax = a*np.cos(delta)

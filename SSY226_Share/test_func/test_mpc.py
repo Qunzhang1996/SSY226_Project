@@ -6,9 +6,12 @@ import casadi as cs
 from enum import IntEnum
 import warnings
 import sys
-sys.path.append('/home/zq/Desktop/SSY226_Project')
-from SSY226_Share.src.vehicle_class import C, ST, C_k
+# sys.path.append('/home/zq/Desktop/SSY226_Project')
+# from SSY226_Share.src.vehicle_class import C_k
 
+
+class C_k(IntEnum):
+    X_km, Y_km, Psi, T, V_km =range(5)
 class Car_km():
     def __init__(self, state, dt=0.1, nt=4, L=4):
         self.L = L
@@ -59,6 +62,9 @@ class Car_km():
         nu = self.nu
         nx = nx - 1
         x_op = self.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
+        if x_op[C_k.V_km-1] == 0:
+            x_op[C_k.V_km-1] = 0.01
+        x_op[C_k.Psi] = np.arctan2(np.sin(x_op[C_k.Psi]), np.cos(x_op[C_k.Psi]))
         u_op = self.u
         self.create_car_F_km()
         # Define state and control symbolic variables
@@ -154,22 +160,30 @@ class Car_km():
             state_prej = predicted_state
 
         return u_optimal_list, predicted_trajectories
-
-
+    # Calculate the direction at each point
+    def calculate_direction(x, y):
+        dy = np.diff(y, prepend=y[0])
+        dx = np.diff(x, prepend=x[0])
+        psi = np.arctan2(dy, dx)
+        return psi
     
-def find_target_point(trajectory, point, shift_points, last_index=0):
-    # Calculate the squared Euclidean distance to each point in the trajectory
-    distances = np.sum((trajectory - point) ** 2, axis=1)
-    # Find the index of the closest point
-    closest_idx = np.argmin(distances)
-    target_idx = closest_idx + shift_points
-    if target_idx > len(trajectory) - 1:
-        target_idx = len(trajectory) - 1
-    if target_idx <= last_index:
-        target_idx = last_index
-    # Return the closest point and its index
-    target_point = trajectory[target_idx]
-    return target_point, target_idx
+    def find_target_point(trajectory, point, shift_points, last_index=0):
+        # Calculate the squared Euclidean distance to each point in the trajectory
+        distances = np.sum((trajectory - point) ** 2, axis=1)
+        # Find the index of the closest point
+        closest_idx = np.argmin(distances)
+        target_idx = closest_idx + shift_points
+        if target_idx > len(trajectory) - 1:
+            target_idx = len(trajectory) - 1
+        if target_idx <= last_index:
+            target_idx = last_index
+        # Return the closest point and its index
+        target_point = trajectory[target_idx]
+        return target_point, target_idx
+
+
+
+
 
 # Define a function to generate a curve
 def generate_curve(A=5, B=0.1, x_max=50):
@@ -177,46 +191,22 @@ def generate_curve(A=5, B=0.1, x_max=50):
     y = A * np.sin(B * x)
     return x, y
 
-# Calculate the direction at each point
-def calculate_direction(x, y):
-    dy = np.diff(y, prepend=y[0])
-    dx = np.diff(x, prepend=x[0])
-    psi = np.arctan2(dy, dx)
-    return psi
-
-# Define arrow plot function
-def plot_car_direction(ax, car_state, arrow_length=2.0):
-    """
-    Draw an arrow on the given axis to represent the direction of the car.
-    :param ax: Matplotlib axes object for drawing the arrow.
-    :param car_state: Array containing the car's state.
-    :param arrow_length: Length of the arrow.
-    """
-    x_arrow = car_state[C_k.X_km]
-    y_arrow = car_state[C_k.Y_km]
-    dx_arrow = arrow_length * np.cos(car_state[C_k.Psi])
-    dy_arrow = arrow_length * np.sin(car_state[C_k.Psi])
-    ax.arrow(x_arrow, y_arrow, dx_arrow, dy_arrow, head_width=0.5, head_length=0.5, fc='green', ec='green')
-
 # Generate the reference curve
 x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=100)
 
 # concate x_ref and y_ref as 2d array, shape of (N,2)
 ref_points = np.vstack([x_ref, y_ref]).T
-psi_ref = calculate_direction(x_ref, y_ref)
-target_point, target_idx = find_target_point(ref_points, np.array(x_ref[0], y_ref[0]), 10)
+
 
 
 
 # Initialize car model
 car = Car_km(state=np.array([0, 0,-np.pi, 5]))
-
+psi_ref = Car_km.calculate_direction(x_ref, y_ref)
 # Store the car's trajectory
 trajectory = []
 last_index = 0
-
 u_optimal=np.zeros(2)
-
 # define the car as a rectangle
 # Plot the car as a rectangle
 car_length = 4.0  # Define the car's length
@@ -230,11 +220,9 @@ for i in range(len(x_ref) + 80):
     plt.cla()
     current_position = car.state[[C_k.X_km, C_k.Y_km]]
 
-    target_point, target_idx = find_target_point(ref_points, current_position, 1, last_index)
+    target_point, target_idx = Car_km.find_target_point(ref_points, current_position, 1, last_index)
     last_index = target_idx
     ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 10])
-
-    car.state[C_k.Psi] = np.arctan2(np.sin(car.state[C_k.Psi]), np.cos(car.state[C_k.Psi]))
     error = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
     heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
     error[2] = heading_error

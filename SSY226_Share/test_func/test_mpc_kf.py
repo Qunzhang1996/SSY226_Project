@@ -6,31 +6,49 @@ import casadi as cs
 from enum import IntEnum
 import warnings
 import sys
+from scipy.linalg import solve_discrete_are
 sys.path.append('/home/zq/Desktop/SSY226_Project')
 from SSY226_Share.src.vehicle_class import C, ST, C_k, Vehicle
-#define kalman filter class
+
 class ExtendedKalmanFilter:
-    def __init__(self, H, Q, R, x0, P0):
+    def __init__(self, A, H, Q, R, x0, P0):
+        self.A = A  # System dynamics matrix
         self.H = H  # Observation matrix
         self.Q = Q  # Process noise covariance
         self.R = R  # Measurement noise covariance
         self.x = x0  # Initial state estimate
         self.P = P0  # Initial covariance estimate
+        self.K_prev = None  # Store previous Kalman gain
+        self.K_converged = False
+        self.K_steady_state = self.compute_steady_state_kalman_gain()  # Compute steady-state Kalman gain
 
-    def predict(self, A, B, u):
-        print('this is A dot', np.dot(A, self.x))
-        print('this is B dot', np.dot(B, u))
-        self.x = np.dot(A, self.x) + np.dot(B, u)  # State prediction using AX + BU
-        self.P = np.dot(A, np.dot(self.P, A.T)) + self.Q  # Covariance prediction
+    def compute_steady_state_kalman_gain(self):
+        # Solve the discrete-time algebraic Riccati equation
+        P_steady_state = solve_discrete_are(self.A, self.H, self.Q, self.R)
+        # Compute the steady-state Kalman gain
+        K_steady_state = np.dot(P_steady_state, np.dot(self.H.T, np.linalg.inv(np.dot(self.H, np.dot(P_steady_state, self.H.T)) + self.R)))
+        return K_steady_state
 
+    def predict(self, B, u):
+        self.x = np.dot(self.A, self.x) + np.dot(B, u)  # State prediction using AX + BU
+        self.P = np.dot(self.A, np.dot(self.P, self.A.T)) + self.Q  # Covariance prediction
 
-    def update(self, z):
-        K = np.dot(self.P, np.dot(self.H.T, np.linalg.inv(np.dot(self.H, np.dot(self.P, self.H.T)) + self.R)))
+    def update(self, z, convergence_threshold=1e-4):
+        K = self.K_steady_state if self.K_converged else np.dot(self.P, np.dot(self.H.T, np.linalg.inv(np.dot(self.H, np.dot(self.P, self.H.T)) + self.R)))
+        
+        # Check for convergence of K
+        if self.K_prev is not None:
+            if np.linalg.norm(K - self.K_prev) < convergence_threshold:
+                self.K_converged = True
+
+        # Update state and covariance
         self.x = self.x + np.dot(K, (z - np.dot(self.H, self.x)))
         self.P = self.P - np.dot(K, np.dot(self.H, self.P))
 
+        # Update previous Kalman gain
+        self.K_prev = K
 
-
+        return self.K_converged
 class Car_km():
     def __init__(self, state, dt=0.1, nt=4, L=4):
         self.L = L
@@ -245,14 +263,14 @@ car_length = 4.0  # Define the car's length
 car_width = 1.0   # Define the car's width
 
 
-noise_level=0.1
+noise_level=0.5
 #initialize the kalman filter
 H = np.eye(car.nx-1)  # Observation matrix
 Q= noise_level**2 * np.eye(car.nx-1)
 R = 0.01*noise_level**2 * np.eye(car.nx-1)  # Measurement noise covariance
 x0 = np.array([0, 0, np.pi/4, 5])  # Initial state estimate
 P0 = np.eye(car.nx-1)  # Initial covariance estimate
-ekf = ExtendedKalmanFilter(H, Q, R, x0, P0)
+
 u_optimal=np.zeros(2)
 
 
@@ -270,7 +288,9 @@ for i in range(len(x_ref) + 10):
     ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 10])
     #start to get measurement
     # calculate the A B matrix of current time step
+    
     A, B = car.calculate_AB(car.dt)
+    ekf = ExtendedKalmanFilter(A,H, Q, R, x0, P0)
 
     print('this is A', A)
     print('this is B', B)
@@ -287,7 +307,7 @@ for i in range(len(x_ref) + 10):
 
 
     #do kalman filter
-    ekf.predict(A, B, u_optimal)
+    ekf.predict(B, u_optimal)
     
     ekf.update(noisy_measurement)
     
