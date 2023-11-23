@@ -6,8 +6,6 @@ import casadi as cs
 from enum import IntEnum
 import warnings
 import sys
-# sys.path.append('/home/zq/Desktop/SSY226_Project')
-# from SSY226_Share.src.vehicle_class import C_k
 
 
 class C_k(IntEnum):
@@ -50,8 +48,6 @@ class Car_km():
         x_kp1 = x + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
         F = cs.Function('F', [x, u, dt], [x_kp1])  # x_k+1 = F(x_k, u_k, dt)
         self.car_F = F  # Save the vehicle model in the object variable
-
-
         self.K_dot_x = cs.vertcat(dot_x_km, dot_y_km, dot_psi, dot_v_km)
         self.K_x = cs.vertcat(x_km, y_km, psi, v_km)
         self.K_u = cs.vertcat(a_km, delta)
@@ -70,10 +66,8 @@ class Car_km():
         # Define state and control symbolic variables
         x = cs.SX.sym('x', nx)
         u = cs.SX.sym('u', nu)
-
         # Get the state dynamics from the kinematic car model
         state_dynamics = self.kinematic_car_model(x, u)
-
         # Calculate the Jacobians for linearization
         A = cs.jacobian(state_dynamics, x)
         B = cs.jacobian(state_dynamics, u)
@@ -191,84 +185,86 @@ def generate_curve(A=5, B=0.1, x_max=50):
     y = A * np.sin(B * x)
     return x, y
 
-# Generate the reference curve
-x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=100)
-
-# concate x_ref and y_ref as 2d array, shape of (N,2)
-ref_points = np.vstack([x_ref, y_ref]).T
 
 
 
 
-# Initialize car model
-car = Car_km(state=np.array([0, 0,-np.pi, 5]))
-psi_ref = Car_km.calculate_direction(x_ref, y_ref)
-# Store the car's trajectory
-trajectory = []
-last_index = 0
-u_optimal=np.zeros(2)
-# define the car as a rectangle
-# Plot the car as a rectangle
-car_length = 4.0  # Define the car's length
-car_width = 1.0   # Define the car's width
+def main():
+    # Generate the reference curve
+    x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=100)
+
+    # concate x_ref and y_ref as 2d array, shape of (N,2)
+    ref_points = np.vstack([x_ref, y_ref]).T
+    # Initialize car model
+    car = Car_km(state=np.array([0, 0,-np.pi, 5]))
+    psi_ref = Car_km.calculate_direction(x_ref, y_ref)
+    # Store the car's trajectory
+    trajectory = []
+    last_index = 0
+    u_optimal=np.zeros(2)
+    # define the car as a rectangle
+    # Plot the car as a rectangle
+    car_length = 4.0  # Define the car's length
+    car_width = 1.0   # Define the car's width
 
 
 
-plt.ion()
+    plt.ion()
 
-for i in range(len(x_ref) + 80):
-    plt.cla()
-    current_position = car.state[[C_k.X_km, C_k.Y_km]]
+    for i in range(len(x_ref) + 80):
+        plt.cla()
+        current_position = car.state[[C_k.X_km, C_k.Y_km]]
 
-    target_point, target_idx = Car_km.find_target_point(ref_points, current_position, 1, last_index)
-    last_index = target_idx
-    ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 10])
-    error = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
-    heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
-    error[2] = heading_error
-    if car.state[C_k.V_km] == 0:
-        car.state[C_k.V_km] = 0.01
+        target_point, target_idx = Car_km.find_target_point(ref_points, current_position, 1, last_index)
+        last_index = target_idx
+        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 10])
+        error = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
+        heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
+        error[2] = heading_error
+        if car.state[C_k.V_km] == 0:
+            car.state[C_k.V_km] = 0.01
 
-    # Call compute_km_mpc to get both u_optimal and predicted_trajectories
-    u_optimal, predicted_trajectories = car.compute_km_mpc(car.state, error)
+        # Call compute_km_mpc to get both u_optimal and predicted_trajectories
+        u_optimal, predicted_trajectories = car.compute_km_mpc(car.state, error)
 
-    # Visualize the predicted trajectories
-    predicted_trajectories = np.array(predicted_trajectories)
+        # Visualize the predicted trajectories
+        predicted_trajectories = np.array(predicted_trajectories)
 
-    # Plot the reference trajectory
-    plt.plot(x_ref, y_ref)
+        # Plot the reference trajectory
+        plt.plot(x_ref, y_ref)
 
-    # Plot the predicted trajectories using vectorized plot
-    plt.plot(*predicted_trajectories[:, [C_k.X_km, C_k.Y_km]].T, '-', color='red')
+        # Plot the predicted trajectories using vectorized plot
+        plt.plot(*predicted_trajectories[:, [C_k.X_km, C_k.Y_km]].T, '-', color='red')
 
-    # Plot the car
-    car_x = car.state[C_k.X_km] - 0.5 * car_length * np.cos(car.state[C_k.Psi])
-    car_y = car.state[C_k.Y_km] - 0.5 * car_length * np.sin(car.state[C_k.Psi])
-    car_angle = np.degrees(car.state[C_k.Psi])
-    car_rect = plt.Rectangle((car_x, car_y), car_length, car_width, angle=car_angle, edgecolor='blue', facecolor='none')
-    plt.gca().add_patch(car_rect)
-    
-    # Update car state
-    car.state = car.car_F(car.state, u_optimal[0], car.dt).full().flatten()
+        # Plot the car
+        car_x = car.state[C_k.X_km] - 0.5 * car_length * np.cos(car.state[C_k.Psi])
+        car_y = car.state[C_k.Y_km] - 0.5 * car_length * np.sin(car.state[C_k.Psi])
+        car_angle = np.degrees(car.state[C_k.Psi])
+        car_rect = plt.Rectangle((car_x, car_y), car_length, car_width, angle=car_angle, edgecolor='blue', facecolor='none')
+        plt.gca().add_patch(car_rect)
+        
+        # Update car state
+        car.state = car.car_F(car.state, u_optimal[0], car.dt).full().flatten()
 
+        plt.axis("equal")
+        plt.pause(0.1)
+        trajectory.append(car.state.copy())
+
+    plt.ioff()
+
+    # Convert trajectory to NumPy array
+    trajectory = np.array(trajectory)
+
+
+    # Visualize results
+    plt.figure(figsize=(12, 6))
+    plt.plot(x_ref, y_ref, label="Reference Path")
+    plt.plot(trajectory[:, 0], trajectory[:, 1], label="Car Trajectory", linestyle='--', color='red')
+    plt.xlabel("X position (m)")
+    plt.ylabel("Y position (m)")
+    plt.title("MPC Tracking Performance")
+    plt.legend()
     plt.axis("equal")
-    plt.pause(0.1)
-    trajectory.append(car.state.copy())
-
-plt.ioff()
-
-# Convert trajectory to NumPy array
-trajectory = np.array(trajectory)
-
-
-# Visualize results
-plt.figure(figsize=(12, 6))
-plt.plot(x_ref, y_ref, label="Reference Path")
-plt.plot(trajectory[:, 0], trajectory[:, 1], label="Car Trajectory", linestyle='--', color='red')
-plt.xlabel("X position (m)")
-plt.ylabel("Y position (m)")
-plt.title("MPC Tracking Performance")
-plt.legend()
-plt.axis("equal")
-plt.grid(True)
-plt.show()
+    plt.grid(True)
+    plt.show()
+main()
