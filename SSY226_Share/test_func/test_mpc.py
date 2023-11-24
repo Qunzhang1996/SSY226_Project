@@ -8,7 +8,7 @@ from enum import IntEnum
 class C_k(IntEnum):
     X_km, Y_km, Psi, T, V_km =range(5)
 
-    
+
 class Car_km():
     def __init__(self, state, dt=0.1, nt=4, L=4):
         self.L = L
@@ -16,9 +16,9 @@ class Car_km():
         self.nu = 2
         self.state = np.zeros(self.nx)
         self.state[:nt] = state
-        self.state[C_k.V_km] = 5
+        self.state[C_k.V_km] = 10
         self.u = np.zeros(self.nu)
-        self.q = np.diag([10.0, 10.0, 0.1, 0.01])
+        self.q = np.diag([10.0, 10.0, 10, 0.01])
         self.r = np.diag([1, 1]) 
         self.dt = dt
         self.lasy_index = 0
@@ -233,7 +233,7 @@ def main():
     # concate x_ref and y_ref as 2d array, shape of (N,2)
     ref_points = np.vstack([x_ref, y_ref]).T
     # Initialize car model
-    car = Car_km(state=np.array([0, 0,np.pi/4, 0]))#notice the forth element is time
+    car = Car_km(state=np.array([0, 0,-np.pi/4, 0]))#notice the forth element is time
 
     psi_ref = car.calculate_direction(x_ref, y_ref)
     # Store the car's trajectory
@@ -244,16 +244,19 @@ def main():
     car_length = 4.0  # Define the car's length
     car_width = 1.0   # Define the car's width
     plt.ion()
-    for i in range(120):
+    for i in range(180):
         plt.cla()
 
         #here!    Simulate the car for one time step
         ##############################################################
-        #TODO:here, u can represent it as carla_state
-        carla_state=car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
+        #TODO:here, u can modify it as carla_state
+        carla_state=np.zeros(5)
+        carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]=car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
+        carla_state[C_k.V_km]=car.state[C_k.V_km]+5
+    
 
         u_optimal, predicted_trajectories,car.last_index = \
-            car.simulate(car.state, ref_points, psi_ref, last_index)
+            car.simulate(carla_state, ref_points, psi_ref, last_index)
         ##############################################################
 
         # Visualize the predicted trajectories
