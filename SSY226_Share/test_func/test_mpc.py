@@ -1,15 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import math
-import scipy
 import casadi as cs
 from enum import IntEnum
-import warnings
-import sys
+
 
 
 class C_k(IntEnum):
     X_km, Y_km, Psi, T, V_km =range(5)
+
+    
 class Car_km():
     def __init__(self, state, dt=0.1, nt=4, L=4):
         self.L = L
@@ -17,11 +16,12 @@ class Car_km():
         self.nu = 2
         self.state = np.zeros(self.nx)
         self.state[:nt] = state
-        self.state[C_k.V_km] = 0
+        self.state[C_k.V_km] = 5
         self.u = np.zeros(self.nu)
         self.q = np.diag([10.0, 10.0, 0.1, 0.01])
         self.r = np.diag([1, 1]) 
         self.dt = dt
+        self.lasy_index = 0
 
     def create_car_F_km(self):  # Create a discrete model of the vehicle
         nx = self.nx
@@ -115,7 +115,6 @@ class Car_km():
         
         # Add the objective function to the optimization problem
         opti.minimize(obj)
-        
         # Constraints
         for i in range(N):
             opti.subject_to(X[:, i+1] == cs.mtimes(a, X[:, i]) + cs.mtimes(b, U[:, i]))
@@ -153,15 +152,16 @@ class Car_km():
             # Update the initial error for the next time step
             state_prej = predicted_state
 
-        return u_optimal_list, predicted_trajectories
+        return u_optimal_list[0], predicted_trajectories
+    
     # Calculate the direction at each point
-    def calculate_direction(x, y):
+    def calculate_direction(self,x, y):
         dy = np.diff(y, prepend=y[0])
         dx = np.diff(x, prepend=x[0])
         psi = np.arctan2(dy, dx)
         return psi
     
-    def find_target_point(trajectory, point, shift_points, last_index=0):
+    def find_target_point(self,trajectory, point, shift_points, last_index):
         # Calculate the squared Euclidean distance to each point in the trajectory
         distances = np.sum((trajectory - point) ** 2, axis=1)
         # Find the index of the closest point
@@ -174,8 +174,49 @@ class Car_km():
         # Return the closest point and its index
         target_point = trajectory[target_idx]
         return target_point, target_idx
+    
+    def rad2deg(self,angle):
+        return angle * 180 / np.pi
+    
+    def deg2rad(self,angle):
+        return angle * np.pi / 180
+    
+    def simulate(self,outside_carla_state=np.zeros(4),ref_points=None, psi_ref=None,last_index=None):
+        if last_index is None:
+            last_index = self.last_index
+        
 
+        #To do the simluation, use the state shown below, otherwise, use the state from carla and comment the following line
+        state_carla=np.zeros(5)
+        state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]\
+            =outside_carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
+        state_carla[C_k.T]=self.state[C_k.T]
+        print('this is the state in km', state_carla)
+        
+        current_position = state_carla[[C_k.X_km, C_k.Y_km]].T
+        target_point, target_idx = self.find_target_point(ref_points, current_position, \
+                                                          1,last_index)
+        last_index = target_idx
+        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 10])
+        error = state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
+        heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
+        error[2] = heading_error
+        # Call compute_km_mpc to get both u_optimal and predicted_trajectories
+        u_optimal, predicted_trajectories = self.compute_km_mpc(state_carla, error)
+        # Visualize the predicted trajectories
+        predicted_trajectories = np.array(predicted_trajectories)
+        self.state = self.car_F(self.state, u_optimal, self.dt).full().flatten()
+        #here, return the u_optimal for carla to use,with degree
+        u_optimal[1]=self.rad2deg(u_optimal[1])
 
+        #since the max of carla is form -75 to 75, so we need to limit the steering angle and scale it
+        if u_optimal[1]>75:
+            u_optimal[1]=75 
+        elif u_optimal[1]<-75:
+            u_optimal[1]=-75
+        u_optimal[1]=u_optimal[1]/75
+
+        return u_optimal, predicted_trajectories,last_index
 
 
 
@@ -185,78 +226,57 @@ def generate_curve(A=5, B=0.1, x_max=50):
     y = A * np.sin(B * x)
     return x, y
 
-
-
-
-
 def main():
     # Generate the reference curve
     x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=100)
-
+    last_index = 0
     # concate x_ref and y_ref as 2d array, shape of (N,2)
     ref_points = np.vstack([x_ref, y_ref]).T
     # Initialize car model
-    car = Car_km(state=np.array([0, 0,-np.pi, 5]))
-    psi_ref = Car_km.calculate_direction(x_ref, y_ref)
+    car = Car_km(state=np.array([0, 0,np.pi/4, 0]))#notice the forth element is time
+
+    psi_ref = car.calculate_direction(x_ref, y_ref)
     # Store the car's trajectory
     trajectory = []
     last_index = 0
-    u_optimal=np.zeros(2)
     # define the car as a rectangle
     # Plot the car as a rectangle
     car_length = 4.0  # Define the car's length
     car_width = 1.0   # Define the car's width
-
-
-
     plt.ion()
-
-    for i in range(len(x_ref) + 80):
+    for i in range(120):
         plt.cla()
-        current_position = car.state[[C_k.X_km, C_k.Y_km]]
 
-        target_point, target_idx = Car_km.find_target_point(ref_points, current_position, 1, last_index)
-        last_index = target_idx
-        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 10])
-        error = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
-        heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
-        error[2] = heading_error
-        if car.state[C_k.V_km] == 0:
-            car.state[C_k.V_km] = 0.01
+        #here!    Simulate the car for one time step
+        ##############################################################
+        #TODO:here, u can represent it as carla_state
+        carla_state=car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
 
-        # Call compute_km_mpc to get both u_optimal and predicted_trajectories
-        u_optimal, predicted_trajectories = car.compute_km_mpc(car.state, error)
+        u_optimal, predicted_trajectories,car.last_index = \
+            car.simulate(car.state, ref_points, psi_ref, last_index)
+        ##############################################################
 
         # Visualize the predicted trajectories
         predicted_trajectories = np.array(predicted_trajectories)
-
         # Plot the reference trajectory
         plt.plot(x_ref, y_ref)
-
         # Plot the predicted trajectories using vectorized plot
         plt.plot(*predicted_trajectories[:, [C_k.X_km, C_k.Y_km]].T, '-', color='red')
-
         # Plot the car
         car_x = car.state[C_k.X_km] - 0.5 * car_length * np.cos(car.state[C_k.Psi])
         car_y = car.state[C_k.Y_km] - 0.5 * car_length * np.sin(car.state[C_k.Psi])
         car_angle = np.degrees(car.state[C_k.Psi])
         car_rect = plt.Rectangle((car_x, car_y), car_length, car_width, angle=car_angle, edgecolor='blue', facecolor='none')
         plt.gca().add_patch(car_rect)
-        
         # Update car state
-        car.state = car.car_F(car.state, u_optimal[0], car.dt).full().flatten()
-
         plt.axis("equal")
         plt.pause(0.1)
-        trajectory.append(car.state.copy())
-
+        trajectory.append(car.state.copy().flatten())
     plt.ioff()
+        # Visualize results
 
     # Convert trajectory to NumPy array
     trajectory = np.array(trajectory)
-
-
-    # Visualize results
     plt.figure(figsize=(12, 6))
     plt.plot(x_ref, y_ref, label="Reference Path")
     plt.plot(trajectory[:, 0], trajectory[:, 1], label="Car Trajectory", linestyle='--', color='red')
@@ -267,4 +287,8 @@ def main():
     plt.axis("equal")
     plt.grid(True)
     plt.show()
-main()
+
+
+
+if __name__ == '__main__':
+    main()
