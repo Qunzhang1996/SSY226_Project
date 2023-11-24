@@ -18,7 +18,7 @@ class Car_km():
         self.state[:nt] = state
         self.state[C_k.V_km] = 10
         self.u = np.zeros(self.nu)
-        self.q = np.diag([10.0, 10.0, 10, 0.01])
+        self.q = np.diag([10.0, 10.0, 0.1, 1])
         self.r = np.diag([1, 1]) 
         self.dt = dt
         self.lasy_index = 0
@@ -123,8 +123,8 @@ class Car_km():
         opti.subject_to(X[:, 0] == error0)
         
         # Control input constraints
-        u_min = [-5, -np.pi / 6]
-        u_max = [5, np.pi / 6]
+        u_min = [-10, -np.pi / 3]
+        u_max = [10, np.pi / 3]
         for j in range(nu):
             opti.subject_to(opti.bounded(u_min[j], U[j, :], u_max[j]))
         
@@ -151,6 +151,7 @@ class Car_km():
             
             # Update the initial error for the next time step
             state_prej = predicted_state
+        print('this is the input', u_optimal_list[0])
 
         return u_optimal_list[0], predicted_trajectories
     
@@ -185,13 +186,15 @@ class Car_km():
         if last_index is None:
             last_index = self.last_index
         
-
         #To do the simluation, use the state shown below, otherwise, use the state from carla and comment the following line
         state_carla=np.zeros(5)
         state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]\
             =outside_carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
         state_carla[C_k.T]=self.state[C_k.T]
-        print('this is the state in km', state_carla)
+        #here, try to make some difference between the carla and self.state
+        # state_carla[C_k.Psi]=state_carla[C_k.Psi]+0.01*np.pi
+        # state_carla[C_k.V_km]=state_carla[C_k.V_km]+0.1
+        
         
         current_position = state_carla[[C_k.X_km, C_k.Y_km]].T
         target_point, target_idx = self.find_target_point(ref_points, current_position, \
@@ -205,7 +208,8 @@ class Car_km():
         u_optimal, predicted_trajectories = self.compute_km_mpc(state_carla, error)
         # Visualize the predicted trajectories
         predicted_trajectories = np.array(predicted_trajectories)
-        self.state = self.car_F(self.state, u_optimal, self.dt).full().flatten()
+        self.state = self.car_F(state_carla, u_optimal, self.dt).full().flatten()
+        print('this is the state in km', self.state)
         #here, return the u_optimal for carla to use,with degree
         u_optimal[1]=self.rad2deg(u_optimal[1])
 
@@ -233,7 +237,9 @@ def main():
     # concate x_ref and y_ref as 2d array, shape of (N,2)
     ref_points = np.vstack([x_ref, y_ref]).T
     # Initialize car model
-    car = Car_km(state=np.array([0, 0,-np.pi/4, 0]))#notice the forth element is time
+    car = Car_km(state=np.array([0, 0,np.pi/4, 0]))#notice the forth element is time 
+    #To change the initial velocity, change the in the class Car_km
+    #TODO:  self.state[C_k.V_km] = 10, CHANGE HERE!!!!!!!!
 
     psi_ref = car.calculate_direction(x_ref, y_ref)
     # Store the car's trajectory
@@ -244,15 +250,17 @@ def main():
     car_length = 4.0  # Define the car's length
     car_width = 1.0   # Define the car's width
     plt.ion()
-    for i in range(180):
+    for i in range(130):
         plt.cla()
 
         #here!    Simulate the car for one time step
         ##############################################################
         #TODO:here, u can modify it as carla_state
         carla_state=np.zeros(5)
+
+        #TODO:Change Here!  the first elements are x,y,psi,v!!!!!!!!!!!!!!!!
         carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]=car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
-        carla_state[C_k.V_km]=car.state[C_k.V_km]+5
+
     
 
         u_optimal, predicted_trajectories,car.last_index = \
