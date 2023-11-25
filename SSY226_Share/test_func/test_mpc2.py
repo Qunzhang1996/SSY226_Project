@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import casadi as cs
 from enum import IntEnum
+from scipy.interpolate import CubicSpline
 
 
 
@@ -16,7 +17,7 @@ class Car_km():
         self.nu = 2
         self.state = np.zeros(self.nx)
         self.state[:nt] = state
-        self.state[C_k.V_km] = 80
+        self.state[C_k.V_km] = 0
         self.u = np.zeros(self.nu)
         self.q = np.diag([10.0, 10.0, 0.1, 1])
         self.r = np.diag([1, 1]) 
@@ -94,64 +95,72 @@ class Car_km():
         self.P = P
         return R
 
-    def compute_km_mpc(self, state, error0, N=10):
-        nx = self.nx
+    def compute_km_mpc(self, state, error0, ref_points, left_edge_y, right_edge_y, edge_indices, N=10):
+        nx = self.nx - 1
         nu = self.nu
-        nx = nx - 1
         a, b = self.calculate_AB(self.dt)
-        from scipy import linalg as la
-        # Create a QP problem
-        opti = cs.Opti()  
-        state_prej = state
-        # Decision variables for state and input
-        X = opti.variable(nx, N+1)
+
+        opti = cs.Opti()
+        X = opti.variable(nx, N + 1)
         U = opti.variable(nu, N)
-        
-        # Objective function
-        obj = 0  # Initiate objective function
+
+        penalty_weight = 1  # 惩罚权重
+        obj = 0  # 初始化目标函数
+
+        # 时间向量用于插值
+        time_vector = np.linspace(0, 1, len(ref_points))
+        time_vector_pred = np.linspace(0, 1, N)
+        # 创建三次样条插值函数
+        spline_x = CubicSpline(time_vector, ref_points[:, 0])
+
         for i in range(N):
-            obj += cs.mtimes([X[:, i].T, self.q, X[:, i]])  # State cost
-            obj += cs.mtimes([U[:, i].T, self.r, U[:, i]])  # Control cost
-        
-        # Add the objective function to the optimization problem
-        opti.minimize(obj)        
-        # Constraints
-        for i in range(N):
-            opti.subject_to(X[:, i+1] == cs.mtimes(a, X[:, i]) + cs.mtimes(b, U[:, i]))
-        
-        # Initial constraints
+            # 计算动态参考点
+            dynamic_ref_x = spline_x(time_vector_pred[i])
+
+            # 将偏差转换为实际状态值
+            actual_state_y = X[C_k.Y_km, i] + dynamic_ref_x
+
+            # 状态成本和控制成本
+            obj += cs.mtimes([X[:, i].T, self.q, X[:, i]])
+            obj += cs.mtimes([U[:, i].T, self.r, U[:, i]])
+
+            # 道路边缘惩罚项
+            idx = edge_indices[i] if i < len(edge_indices) else -1
+            edge_left = left_edge_y[idx] if idx >= 0 else left_edge_y[-1]
+            edge_right = right_edge_y[idx] if idx >= 0 else right_edge_y[-1]
+
+            obj += penalty_weight * cs.fmax(0, edge_left - actual_state_y)**2
+            obj += penalty_weight * cs.fmax(0, actual_state_y - edge_right)**2
+
+        opti.minimize(obj)
+
+        # 初始误差约束
         opti.subject_to(X[:, 0] == error0)
-        
-        # Control input constraints
-        u_min = [-50, -np.pi / 3]
-        u_max = [50, np.pi / 3]
+
+        # 动力学约束
+        for i in range(N):
+            opti.subject_to(X[:, i + 1] == cs.mtimes(a, X[:, i]) + cs.mtimes(b, U[:, i]))
+
+        # 控制输入约束
+        u_min = [-5, -np.pi / 3]
+        u_max = [5, np.pi / 3]
         for j in range(nu):
             opti.subject_to(opti.bounded(u_min[j], U[j, :], u_max[j]))
-        
-        # Configure the solver
+
+        # 配置求解器并解决优化问题
         opts = {"ipopt.print_level": 0, "print_time": 0}
         opti.solver('ipopt', opts)
 
-        # Initialize lists to store predicted trajectories and optimal control inputs
-        predicted_trajectories = []
-        u_optimal_list = []
-
-        # Solve the optimization problem for each time step
-        for i in range(N):
-            # Solve the optimization problem
+        try:
             sol = opti.solve()
-            
-            # Get the optimal control input for this time step
-            u_optimal = sol.value(U[:, i])
-            u_optimal_list.append(u_optimal)
-            
-            # Calculate and store the predicted state trajectory for this time step
-            predicted_state = self.car_F(state_prej, u_optimal, self.dt).full().flatten()
-            predicted_trajectories.append(predicted_state.copy())
-            
-            # Update the initial error for the next time step
-            state_prej = predicted_state
-        print('this is the input', u_optimal_list[0])
+        except RuntimeError as e:
+            print("Solver failed:", e)
+            for var in [X, U]:
+                print("Value of", var, ":", opti.debug.value(var))
+            raise
+
+        u_optimal_list = [sol.value(U[:, i]) for i in range(N)]
+        predicted_trajectories = [sol.value(X[:, i]) for i in range(N + 1)]
 
         return u_optimal_list[0], predicted_trajectories
     
@@ -182,115 +191,101 @@ class Car_km():
     def deg2rad(self,angle):
         return angle * np.pi / 180
     
-    def simulate(self,outside_carla_state=np.zeros(4),ref_points=None, psi_ref=None,last_index=None):
+    def simulate(self, outside_carla_state=np.zeros(4), ref_points=None, psi_ref=None, left_edge_y=None, right_edge_y=None, last_index=None, N=10):
         if last_index is None:
             last_index = self.last_index
         
-        #To do the simluation, use the state shown below, otherwise, use the state from carla and comment the following line
-        state_carla=np.zeros(5)
-        state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]\
-            =outside_carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
-        state_carla[C_k.T]=self.state[C_k.T]
-        #here, try to make some difference between the carla and self.state
-        # state_carla[C_k.Psi]=state_carla[C_k.Psi]+0.01*np.pi
-        # state_carla[C_k.V_km]=state_carla[C_k.V_km]+0.1
-        
-        
+        state_carla = np.zeros(5)
+        state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] = outside_carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
+        state_carla[C_k.T] = self.state[C_k.T]
+
         current_position = state_carla[[C_k.X_km, C_k.Y_km]].T
-        target_point, target_idx = self.find_target_point(ref_points, current_position, \
-                                                          1,last_index)
+        target_point, target_idx = self.find_target_point(ref_points, current_position, 1, last_index)
         last_index = target_idx
-        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 20])
+
+        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 10])
         error = state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
         heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
         error[2] = heading_error
-        # Call compute_km_mpc to get both u_optimal and predicted_trajectories
-        u_optimal, predicted_trajectories = self.compute_km_mpc(state_carla, error)
+
+        edge_indices = np.arange(target_idx, target_idx + N)
+
+        u_optimal, predicted_trajectories = self.compute_km_mpc(state_carla, error, ref_points, left_edge_y, right_edge_y, edge_indices)
         # Visualize the predicted trajectories
         predicted_trajectories = np.array(predicted_trajectories)
         self.state = self.car_F(state_carla, u_optimal, self.dt).full().flatten()
-        print('this is the state in km', self.state)
-        #here, return the u_optimal for carla to use,with degree
-        u_optimal[1]=self.rad2deg(u_optimal[1])
-
-        #since the max of carla is form -75 to 75, so we need to limit the steering angle and scale it
-        if u_optimal[1]>75:
-            u_optimal[1]=75 
-        elif u_optimal[1]<-75:
-            u_optimal[1]=-75
-        u_optimal[1]=u_optimal[1]/75
-
-        return u_optimal, predicted_trajectories,last_index
+        return u_optimal, predicted_trajectories, last_index
 
 
 
 # Define a function to generate a curve
-def generate_curve(A=5, B=0.1, x_max=50):
-    x = np.linspace(0, x_max, 1000)
+def generate_curve(A=5, B=0.1, x_max=50, road_width=7):
+    x = np.linspace(0, x_max, 100)
     y = A * np.sin(B * x)
-    return x, y
+    psi = np.arctan2(np.diff(y, prepend=y[0]), np.diff(x, prepend=x[0]))
+
+    # 计算道路边界
+    left_x = x - road_width / 2 * np.sin(psi)
+    left_y = y + road_width / 2 * np.cos(psi)
+    right_x = x + road_width / 2 * np.sin(psi)
+    right_y = y - road_width / 2 * np.cos(psi)
+
+    return x, y, left_x, left_y, right_x, right_y
 
 def main():
-    # Generate the reference curve
-    x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=200)
-    last_index = 0
-    # concate x_ref and y_ref as 2d array, shape of (N,2)
+    # 生成参考曲线及道路边界
+    x_ref, y_ref, left_x, left_y, right_x, right_y = generate_curve(A=20, B=0.05, x_max=100, road_width=7)
     ref_points = np.vstack([x_ref, y_ref]).T
-    # Initialize car model
-    car = Car_km(state=np.array([0, 0,np.pi/4, 0]))#notice the forth element is time 
-    #To change the initial velocity, change the in the class Car_km
-    #TODO:  self.state[C_k.V_km] = 10, CHANGE HERE!!!!!!!!
+    psi_ref = np.arctan2(np.diff(y_ref, prepend=y_ref[0]), np.diff(x_ref, prepend=x_ref[0]))
 
-    psi_ref = car.calculate_direction(x_ref, y_ref)
-    # Store the car's trajectory
-    trajectory = []
-    last_index = 0
-    # define the car as a rectangle
-    # Plot the car as a rectangle
-    car_length = 4.0  # Define the car's length
-    car_width = 1.0   # Define the car's width
+    # 初始化车辆模型
+    car = Car_km(state=np.array([0, 0, np.pi/4, 0]))
+
+    # 定义障碍物
+    obstacles = [
+        {'position': (25, 20 * np.sin(0.05 * 25)), 'radius': 1},  # On the trajectory
+        {'position': (40, 20 * np.sin(0.05 * 40) + 2), 'radius': 1.5},  # Near the trajectory
+        {'position': (70, 20 * np.sin(0.05 * 70) - 2), 'radius': 1}   # Near the trajectory
+    ]
+
     plt.ion()
-    for i in range(200):
+    last_index = 0
+    for i in range(130):
         plt.cla()
 
-        #here!    Simulate the car for one time step
-        ##############################################################
-        #TODO:here, u can modify it as carla_state
-        carla_state=np.zeros(5)
+        # 模拟车辆运动
+        carla_state = np.zeros(5)
+        carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
+        u_optimal, predicted_trajectories, last_index = car.simulate(carla_state, ref_points, psi_ref, left_y, right_y, last_index)
 
-        #TODO:Change Here!  the first elements are x,y,psi,v!!!!!!!!!!!!!!!!
-        carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]=car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
-
-    
-
-        u_optimal, predicted_trajectories,car.last_index = \
-            car.simulate(carla_state, ref_points, psi_ref, last_index)
-        ##############################################################
-
-        # Visualize the predicted trajectories
+        # 可视化预测轨迹和参考路径
         predicted_trajectories = np.array(predicted_trajectories)
-        # Plot the reference trajectory
-        plt.plot(x_ref, y_ref)
-        # Plot the predicted trajectories using vectorized plot
-        plt.plot(*predicted_trajectories[:, [C_k.X_km, C_k.Y_km]].T, '-', color='red')
-        # Plot the car
-        car_x = car.state[C_k.X_km] - 0.5 * car_length * np.cos(car.state[C_k.Psi])
-        car_y = car.state[C_k.Y_km] - 0.5 * car_length * np.sin(car.state[C_k.Psi])
+        plt.plot(x_ref, y_ref, 'r')  # 参考路径
+        plt.plot(left_x, left_y, 'k--')  # 左侧道路边缘
+        plt.plot(right_x, right_y, 'k--')  # 右侧道路边缘
+        # plt.plot(*predicted_trajectories[:, [C_k.X_km, C_k.Y_km]].T, '-', color='blue')  # 预测轨迹
+
+        # 可视化障碍物
+        for obstacle in obstacles:
+            circle = plt.Circle(obstacle['position'], obstacle['radius'], color='blue', fill=False)
+            plt.gca().add_patch(circle)
+
+        # 绘制车辆
+        car_x = car.state[C_k.X_km]
+        car_y = car.state[C_k.Y_km]
         car_angle = np.degrees(car.state[C_k.Psi])
-        car_rect = plt.Rectangle((car_x, car_y), car_length, car_width, angle=car_angle, edgecolor='blue', facecolor='none')
+        car_rect = plt.Rectangle((car_x, car_y), 4, 1, angle=car_angle, edgecolor='blue', facecolor='none')
         plt.gca().add_patch(car_rect)
-        # Update car state
+
         plt.axis("equal")
         plt.pause(0.1)
-        trajectory.append(car.state.copy().flatten())
-    plt.ioff()
-        # Visualize results
 
-    # Convert trajectory to NumPy array
-    trajectory = np.array(trajectory)
+    plt.ioff()
+
+    # 可视化最终轨迹
     plt.figure(figsize=(12, 6))
     plt.plot(x_ref, y_ref, label="Reference Path")
-    plt.plot(trajectory[:, 0], trajectory[:, 1], label="Car Trajectory", linestyle='--', color='red')
+    plt.plot(*np.array(predicted_trajectories)[:, [C_k.X_km, C_k.Y_km]].T, label="Car Trajectory", linestyle='--', color='red')
     plt.xlabel("X position (m)")
     plt.ylabel("Y position (m)")
     plt.title("MPC Tracking Performance")
@@ -298,7 +293,6 @@ def main():
     plt.axis("equal")
     plt.grid(True)
     plt.show()
-
 
 
 if __name__ == '__main__':
