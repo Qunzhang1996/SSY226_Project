@@ -88,12 +88,14 @@ def main(vehicle, car_flag, route):
     # Generate the reference curve
     # x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=100)
     x_ref, y_ref = visualize_route(route)
-    
-
+    last_index = 0
     # concate x_ref and y_ref as 2d array, shape of (N,2)
     ref_points = np.vstack([x_ref, y_ref]).T
     # Initialize car model
-    car = Car_km(state=np.array([110, 235, -np.pi/4, 5]))
+    car = Car_km(state=np.array([110 , 235,np.pi/4, 0]))#notice the forth element is time 
+    #To change the initial velocity, change the in the class Car_km
+    #TODO:  
+    # self.state[C_k.V_km] = 10, #CHANGE HERE!!!!!!!!
     psi_ref = Car_km.calculate_direction(x_ref, y_ref)
     # Store the car's trajectory
     trajectory = []
@@ -108,56 +110,49 @@ def main(vehicle, car_flag, route):
 
     plt.ion()
 
-    for i in range(len(x_ref) + 80):
+    for i in range(130):
+
         plt.cla()
-        current_position = car.state[[C_k.X_km, C_k.Y_km]]
 
-        target_point, target_idx = Car_km.find_target_point(ref_points, current_position, 1, last_index)
-        last_index = target_idx
-        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 4])
-        error = car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
-        heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
-        error[2] = heading_error
-        if car.state[C_k.V_km] == 0:
-            car.state[C_k.V_km] = 0.01
+        #here!    Simulate the car for one time step
+        ##############################################################
+        #TODO:here, u can modify it as carla_state
+        carla_state=np.zeros(5)
 
-        # Call compute_km_mpc to get both u_optimal and predicted_trajectories
-        u_optimal, predicted_trajectories = car.compute_km_mpc(car.state, error)
+        #TODO:Change Here!  the first elements are x,y,psi,v!!!!!!!!!!!!!!!!
+
+        # carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]=car.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
+        carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]=get_state(vehicle)
+    
+
+        u_optimal, predicted_trajectories,car.last_index = \
+            car.simulate(carla_state, ref_points, psi_ref, last_index)
+        ##############################################################
         estimated_throttle = u_optimal[0]
         steer_input = u_optimal[1]
-        steer_input = ((steer_input) * 180/np.pi)/75
         vehicle.apply_control(carla.VehicleControl(throttle=estimated_throttle, steer=steer_input))
 
         # Visualize the predicted trajectories
         predicted_trajectories = np.array(predicted_trajectories)
-
         # Plot the reference trajectory
         plt.plot(x_ref, y_ref)
-
         # Plot the predicted trajectories using vectorized plot
         plt.plot(*predicted_trajectories[:, [C_k.X_km, C_k.Y_km]].T, '-', color='red')
-
         # Plot the car
         car_x = car.state[C_k.X_km] - 0.5 * car_length * np.cos(car.state[C_k.Psi])
         car_y = car.state[C_k.Y_km] - 0.5 * car_length * np.sin(car.state[C_k.Psi])
         car_angle = np.degrees(car.state[C_k.Psi])
         car_rect = plt.Rectangle((car_x, car_y), car_length, car_width, angle=car_angle, edgecolor='blue', facecolor='none')
         plt.gca().add_patch(car_rect)
-        
         # Update car state
-        car.state = car.car_F(car.state, u_optimal, car.dt).full().flatten()
-
         plt.axis("equal")
         plt.pause(0.1)
-        trajectory.append(car.state.copy())
-
+        trajectory.append(car.state.copy().flatten())
     plt.ioff()
+        # Visualize results
 
     # Convert trajectory to NumPy array
     trajectory = np.array(trajectory)
-
-
-    # Visualize results
     plt.figure(figsize=(12, 6))
     plt.plot(x_ref, y_ref, label="Reference Path")
     plt.plot(trajectory[:, 0], trajectory[:, 1], label="Car Trajectory", linestyle='--', color='red')
@@ -212,10 +207,11 @@ def get_state(vehicle):
     vehicle_vel = vehicle.get_velocity()
 
     # Extract relevant states
-    x = vehicle_loc.x
-    y = vehicle_loc.y
+    x = vehicle_loc.x 
+    y = vehicle_loc.y 
     psi = math.radians(vehicle_rot.yaw)  # Convert yaw to radians
-    v = math.sqrt(vehicle_vel.x**2 + vehicle_vel.y**2)
+    # v = math.sqrt(vehicle_vel.x**2 + vehicle_vel.y**2)
+    v = vehicle_vel.length()  #converting it to km/hr
 
     return x, y, psi, v
 
@@ -228,7 +224,7 @@ def calculate_distance(actor1, actor2):
 
 # Route planner
 
-def plan_route(world, start_point, dest_x, dest_y, dest_z, sampling_resolution=1, debug_draw=False):
+def plan_route(world, start_point, dest_x, dest_y, dest_z, sampling_resolution=1, debug_draw=False, car_flag=False):
     
     # This following line needs to be changed according to YOUR installation path
     carla_path = r'Z:\Documents\WindowsNoEditor\PythonAPI\carla'
@@ -244,14 +240,15 @@ def plan_route(world, start_point, dest_x, dest_y, dest_z, sampling_resolution=1
     print(route)
 
     if debug_draw:
-        for waypoint in route:
-            world.debug.draw_string(
-                waypoint[0].transform.location,
-                '^',
-                draw_shadow=False,
-                color=carla.Color(r=0, g=0, b=255),
-                life_time=60.0,
-                persistent_lines=True
+        if car_flag:
+            for waypoint in route:
+                world.debug.draw_string(
+                    waypoint[0].transform.location,
+                    '^',
+                    draw_shadow=False,
+                    color=carla.Color(r=0, g=0, b=255),
+                    life_time=60.0,
+                    persistent_lines=True
             )
 
     return route
@@ -299,13 +296,13 @@ def convert_to_road_params(route, lane_width):
 
 
 
-route_truck = plan_route(world, start_point_truck, dest_x_truck, dest_y_truck, dest_z_truck, sampling_resolution=1, debug_draw=True)
-route_car = plan_route(world, start_point_car, dest_x_car, dest_y_car, dest_z_car, sampling_resolution=1, debug_draw=True)
-visualize_route(route_car)
-visualize_route(route_truck)
+# route_truck = plan_route(world, start_point_truck, dest_x_truck, dest_y_truck, dest_z_truck, sampling_resolution=1, debug_draw=True)
+# route_car = plan_route(world, start_point_car, dest_x_car, dest_y_car, dest_z_car, sampling_resolution=1, debug_draw=True)
+# visualize_route(route_car)
+# visualize_route(route_truck)
 
 lane_width = 3.5
-convert_to_road_params(route_car, lane_width)
+# convert_to_road_params(route_car, lane_width)
 
 def drive_vehicle(vehicle, route, other_vehicle, car_flag):
     curr_wp = 0
@@ -364,12 +361,12 @@ def drive_vehicle(vehicle, route, other_vehicle, car_flag):
     vehicle.apply_control(carla.VehicleControl(throttle=0, steer=0, brake=1))
 
 # Test for running
-
-route_truck = plan_route(world, start_point_truck, dest_x_truck, dest_y_truck, dest_z_truck, sampling_resolution=1, debug_draw=True)
-route_car = plan_route(world, start_point_car, dest_x_car, dest_y_car, dest_z_car, sampling_resolution=1, debug_draw=True)
 car_flag = True
+route_car = plan_route(world, start_point_car, dest_x_car, dest_y_car, dest_z_car, sampling_resolution=1, debug_draw=True, car_flag=True)
 car_thread = threading.Thread(target=drive_vehicle, args=(car, route_car, truck, car_flag))
+
 car_flag = False
+route_truck = plan_route(world, start_point_truck, dest_x_truck, dest_y_truck, dest_z_truck, sampling_resolution=1, debug_draw=True, car_flag=False)
 truck_thread = threading.Thread(target=drive_vehicle, args=(truck, route_truck, car, car_flag))
 
 # Start the threads
