@@ -126,7 +126,11 @@ class Truck_CC(Car_km):
 
         #to get the optimal control input of the truck, using transformation_inv
         u_optimal_km=self.input_transform_inv(u).reshape(-1,1)
-        print('this is the optimal control input of the truck', u_optimal_km)
+        #set the limitation for the control input(accleration between -1 and 1)
+        u_optimal_km[0]=min(1,max(-1,u_optimal_km[0]))
+        #set the limitation for the control input(steering angle between -0.5 and 0.5)
+        u_optimal_km[1]=min(0.5,max(-0.5,u_optimal_km[1]))
+        # print('this is the optimal control input of the truck', u_optimal_km)
 
         self.state = self.car_F(self.state, u, dt).full().ravel()
 

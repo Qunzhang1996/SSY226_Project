@@ -10,16 +10,16 @@ class C_k(IntEnum):
 
 
 class Car_km():
-    def __init__(self, state, dt=0.1, nt=4, L=4):
+    def __init__(self, state, dt=0.02, nt=4, L=4):
         self.L = L
         self.nx = 5
         self.nu = 2
         self.state = np.zeros(self.nx)
         self.state[:nt] = state
-        self.state[C_k.V_km] = 80
+        self.state[C_k.V_km] = 19
         self.u = np.zeros(self.nu)
-        self.q = np.diag([10.0, 10.0, 0.1, 1])
-        self.r = np.diag([1, 1]) 
+        self.q = np.diag([10.0, 10.0, 1.0, 1.0])
+        self.r = np.diag([0.01, 0.1]) 
         self.dt = dt
         self.lasy_index = 0
 
@@ -53,13 +53,21 @@ class Car_km():
         self.K_u = cs.vertcat(a_km, delta)
         self.kinematic_car_model = cs.Function('kinematic_car_model', [self.K_x, self.K_u], [self.K_dot_x])
 
-    def calculate_AB(self, dt_sim):
+    def calculate_AB(self, dt_sim, state_input=None):
         nx = self.nx
         nu = self.nu
         nx = nx - 1
-        x_op = self.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
-        if x_op[C_k.V_km-1] == 0:
-            x_op[C_k.V_km-1] = 0.01
+
+        # Use the provided state_input if it is given, otherwise use the system's current state
+        if state_input is not None:
+            x_op = state_input
+        else:
+            x_op = self.state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
+
+        # Ensure the velocity is not zero by setting a small positive value
+        small_velocity = 0.01
+        x_op = cs.if_else(x_op[C_k.V_km-1] == 0, cs.vertcat(x_op[:C_k.V_km-1], small_velocity, x_op[C_k.V_km:]), x_op)
+
         x_op[C_k.Psi] = np.arctan2(np.sin(x_op[C_k.Psi]), np.cos(x_op[C_k.Psi]))
         u_op = self.u
         self.create_car_F_km()
@@ -80,10 +88,12 @@ class Car_km():
         B_op = f_B(x_op, u_op)
 
         # Discretize the linearized matrices
-        newA = A_op * dt_sim + np.eye(self.nx-1)
+        newA = A_op * dt_sim + np.eye(nx)
         newB = B_op * dt_sim
 
         return newA, newB
+
+
     
     def compute_km_K(self):
         a, b = self.calculate_AB(self.dt)
@@ -94,37 +104,51 @@ class Car_km():
         self.P = P
         return R
 
-    def compute_km_mpc(self, state, error0, N=10):
+    # Calculate the direction at each point
+    def compute_km_mpc(self, state, ref_states, N=10):
         nx = self.nx
         nu = self.nu
         nx = nx - 1
-        a, b = self.calculate_AB(self.dt)
-        from scipy import linalg as la
+
         # Create a QP problem
         opti = cs.Opti()  
-        state_prej = state
         # Decision variables for state and input
         X = opti.variable(nx, N+1)
         U = opti.variable(nu, N)
-        
+        # Create a parameter for the reference state
+        Ref = opti.parameter(nx, N)
+
         # Objective function
         obj = 0  # Initiate objective function
         for i in range(N):
-            obj += cs.mtimes([X[:, i].T, self.q, X[:, i]])  # State cost
+            state_error = X[:, i] - Ref[:, i]  # State deviation from reference
+            obj += cs.mtimes([state_error.T, self.q, state_error])  # State cost
             obj += cs.mtimes([U[:, i].T, self.r, U[:, i]])  # Control cost
+            #extra cost for the initial state x,y at the first step
+            # obj += 1000*cs.mtimes([state_error[0:2].T, self.q[0:2,0:2], state_error[0:2]])  # State cost
         
         # Add the objective function to the optimization problem
         opti.minimize(obj)        
         # Constraints
         for i in range(N):
-            opti.subject_to(X[:, i+1] == cs.mtimes(a, X[:, i]) + cs.mtimes(b, U[:, i]))
+            # Recalculate the linearized matrices A and B based on the current predicted state
+            C = cs.vertcat(
+                self.dt * X[3, i] * cs.sin(X[2, i]) * X[2, i],
+                -self.dt * X[3, i] * cs.cos(X[2, i]) * X[2, i],
+                0.0,
+                -self.dt * X[3, i] * U[1, i] / (self.L * cs.cos(U[1, i]) ** 2))
+            
+
+            a, b = self.calculate_AB(self.dt, X[:, i])
+            next_state_pred = cs.mtimes(a, X[:, i]) + cs.mtimes(b, U[:, i]) + C
+            opti.subject_to(X[:, i+1] == next_state_pred)
         
-        # Initial constraints
-        opti.subject_to(X[:, 0] == error0)
+        # Initial constraints - setting the first state in the prediction to the current state
+        opti.subject_to(X[:, 0] == state)
         
         # Control input constraints
-        u_min = [-50, -np.pi / 3]
-        u_max = [50, np.pi / 3]
+        u_min = [-5, -np.pi / 6]
+        u_max = [5, np.pi / 6]
         for j in range(nu):
             opti.subject_to(opti.bounded(u_min[j], U[j, :], u_max[j]))
         
@@ -132,30 +156,19 @@ class Car_km():
         opts = {"ipopt.print_level": 0, "print_time": 0}
         opti.solver('ipopt', opts)
 
-        # Initialize lists to store predicted trajectories and optimal control inputs
-        predicted_trajectories = []
-        u_optimal_list = []
+        # Set the value of the reference state parameter
+        opti.set_value(Ref, ref_states)
 
-        # Solve the optimization problem for each time step
-        for i in range(N):
-            # Solve the optimization problem
-            sol = opti.solve()
-            
-            # Get the optimal control input for this time step
-            u_optimal = sol.value(U[:, i])
-            u_optimal_list.append(u_optimal)
-            
-            # Calculate and store the predicted state trajectory for this time step
-            predicted_state = self.car_F(state_prej, u_optimal, self.dt).full().flatten()
-            predicted_trajectories.append(predicted_state.copy())
-            
-            # Update the initial error for the next time step
-            state_prej = predicted_state
-        print('this is the input', u_optimal_list[0])
+        # Solve the optimization problem
+        sol = opti.solve()
+        
+        # Process the solution
+        X_opt = sol.value(X)
+        U_opt = sol.value(U)
 
-        return u_optimal_list[0], predicted_trajectories
-    
-    # Calculate the direction at each point
+        return U_opt[:, 0], X_opt[0:2,:]
+
+
     def calculate_direction(self,x, y):
         dy = np.diff(y, prepend=y[0])
         dx = np.diff(x, prepend=x[0])
@@ -176,9 +189,31 @@ class Car_km():
         target_point = trajectory[target_idx]
         return target_point, target_idx
     
+    def find_target_trajectory(self, trajectory, point, psi_ref, V_ref=25, N=10):
+        # Calculate the squared Euclidean distance to each point in the trajectory
+        distances = np.sum((trajectory[:,:2] - point) ** 2, axis=1)
+        # Find the index of the closest point
+        closest_idx = np.argmin(distances)
+        # target_idx = max(closest_idx + shift_points, last_index + 1)
+        target_idx = closest_idx 
+        # Ensure the index does not exceed the length of the trajectory minus N
+        target_idx = min(target_idx, len(trajectory) - N)
+
+        # Initialize an empty array for the N-step reference trajectory
+        ref_trajectory = np.zeros((4, N))  # Each column: [X, Y, Psi_ref, V_ref]
+
+        # Fill the array with the N-step trajectory points, Psi_ref, and constant V_ref
+        for i in range(N):
+            ref_trajectory[0, i] = trajectory[target_idx + i, 0]  # X coordinate
+            ref_trajectory[1, i] = trajectory[target_idx + i, 1]  # Y coordinate
+            ref_trajectory[2, i] = psi_ref[target_idx + i]        # Psi_ref
+            ref_trajectory[3, i] = V_ref                           # Reference velocity
+
+        return ref_trajectory,target_idx
+
+    
     def rad2deg(self,angle):
         return angle * 180 / np.pi
-    
     def deg2rad(self,angle):
         return angle * np.pi / 180
     
@@ -197,17 +232,15 @@ class Car_km():
         
         
         current_position = state_carla[[C_k.X_km, C_k.Y_km]].T
-        target_point, target_idx = self.find_target_point(ref_points, current_position, \
-                                                          1,last_index)
+        # target_point, target_idx = self.find_target_point(ref_points, current_position, \
+        #                                                   1,last_index)
+        target_trajectory, target_idx = self.find_target_trajectory(ref_points, current_position, \
+                                                                    psi_ref)
         last_index = target_idx
-        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 20])
-        error = state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
-        heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
-        error[2] = heading_error
-        # Call compute_km_mpc to get both u_optimal and predicted_trajectories
-        u_optimal, predicted_trajectories = self.compute_km_mpc(state_carla, error)
+
+        u_optimal, predicted_trajectories = self.compute_km_mpc(state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]], target_trajectory)
+        print('this is the u_optimal',u_optimal)
         # Visualize the predicted trajectories
-        predicted_trajectories = np.array(predicted_trajectories)
         self.state = self.car_F(state_carla, u_optimal, self.dt).full().flatten()
         print('this is the state in km', self.state)
         #here, return the u_optimal for carla to use,with degree
@@ -225,19 +258,19 @@ class Car_km():
 
 
 # Define a function to generate a curve
-def generate_curve(A=5, B=0.1, x_max=50):
-    x = np.linspace(0, x_max, 1000)
+def generate_curve(A=5, B=0.1, x_max=100):
+    x = np.linspace(0, x_max, 200)
     y = A * np.sin(B * x)
     return x, y
 
 def main():
     # Generate the reference curve
-    x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=200)
+    x_ref, y_ref = generate_curve(A=30, B=0.04, x_max=200)
     last_index = 0
     # concate x_ref and y_ref as 2d array, shape of (N,2)
     ref_points = np.vstack([x_ref, y_ref]).T
     # Initialize car model
-    car = Car_km(state=np.array([0, 0,np.pi/4, 0]))#notice the forth element is time 
+    car = Car_km(state=np.array([0, 0, np.pi/4, 0]))#notice the forth element is time 
     #To change the initial velocity, change the in the class Car_km
     #TODO:  self.state[C_k.V_km] = 10, CHANGE HERE!!!!!!!!
 
@@ -250,7 +283,7 @@ def main():
     car_length = 4.0  # Define the car's length
     car_width = 1.0   # Define the car's width
     plt.ion()
-    for i in range(200):
+    for i in range(400):
         plt.cla()
 
         #here!    Simulate the car for one time step
@@ -268,11 +301,10 @@ def main():
         ##############################################################
 
         # Visualize the predicted trajectories
-        predicted_trajectories = np.array(predicted_trajectories)
         # Plot the reference trajectory
         plt.plot(x_ref, y_ref)
         # Plot the predicted trajectories using vectorized plot
-        plt.plot(*predicted_trajectories[:, [C_k.X_km, C_k.Y_km]].T, '-', color='red')
+        plt.plot(predicted_trajectories[C_k.X_km, :], predicted_trajectories[C_k.Y_km, :], '-', color='red', label='Predicted Trajectory')
         # Plot the car
         car_x = car.state[C_k.X_km] - 0.5 * car_length * np.cos(car.state[C_k.Psi])
         car_y = car.state[C_k.Y_km] - 0.5 * car_length * np.sin(car.state[C_k.Psi])

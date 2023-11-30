@@ -640,7 +640,7 @@ class Truck_CC(Car):
         self.history_v_ref.append(self.v_ref)
 
 
-#################
+#################state
 # In simulation
 dt = 0.02  # simulations step in seconds
 lane_width = 3.5 # m
@@ -648,21 +648,21 @@ steps_between_replanning = 25
 # steps_between_replanning = 100
 replanning_iterations = 100
 # replanning_iterations = 10
-P_road_v1 = [0, 0.1, 0, -0.5*lane_width,
-             0, 0.1, 0, 0.5*lane_width]
+P_road_v1 = [0, 0.1, 0, -0.5*lane_width+1,
+             0, 0.1, 0, 0.5*lane_width-1]
 
 
 # Create two independent objects to represent two vehicles
 
 # CC Truck
-v1 = Truck_CC([25, -416.25+200, 0, 0],dt=dt)
+v1 = Truck_CC([25, -416.25-70, 0, 0],dt=dt)
 v1.P_road_v = P_road_v1
 v1.name = 'v1'
 
 # Only used for Car (CAV)
-P_road_v = [lane_width, 0.1, 80, -1.5*lane_width,
-            lane_width, 0.1, 0, -0.5*lane_width]
-v2 = Car([19, -397.53+300, -lane_width, 0],dt=dt)
+P_road_v = [lane_width, 0.1, 80, -1.5*lane_width+0.5,
+            lane_width, 0.1, 0, -0.5*lane_width-0.5]
+v2 = Car([19, -397.53, -lane_width, 0],dt=dt)
 v2.P_road_v = P_road_v
 v2.lane_width = lane_width
 v2.name = 'v2'

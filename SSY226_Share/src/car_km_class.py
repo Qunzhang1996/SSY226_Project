@@ -516,15 +516,15 @@ class Car_km(Vehicle):
         opti.subject_to(X[:, 0] == error0)
         # Control input constraints
         # Control input constraints
-        u_min = [-5, -np.pi / 6]
-        u_max = [5, np.pi / 6]
+        u_min = [-1, -np.pi / 3]
+        u_max = [1, np.pi / 3]
 
         for j in range(nu):
             opti.subject_to(opti.bounded(u_min[j], U[j, :], u_max[j]))
         # Constraint to iput lead to problem!!!!!!!!!!!!!!
         # Configure the solver
         opts = {"ipopt.print_level": 0, "print_time": 0}
-        opti.solver('ipopt')
+        opti.solver('ipopt', opts)
 
         # Solve the optimization problem
         sol = opti.solve()
@@ -647,6 +647,7 @@ class Car_km(Vehicle):
         #calculate the input through MPC
         #TODO:have to check the update in the code above AB Calculation
         u_optimal=self.compute_km_mpc(e)
+        print('this is u_optimal_km', u_optimal)
         # R=self.compute_km_K()
         # u_optimal=-np.matmul(R,e)
 
@@ -656,7 +657,7 @@ class Car_km(Vehicle):
         
         #transfer from km input to mass_point input
         u_optimal_mp=self.input_transform(u_optimal)
-        print('this is u_optimal_mp', u_optimal_mp)
+        
         #transfer carla state to mp state
         state_mp_carla=self.transformation_km2mp(state_carla)
 
