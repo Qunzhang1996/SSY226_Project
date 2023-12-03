@@ -1,0 +1,18 @@
+ # u_optimal, predicted_trajectories, car.last_index = car.simulate(carla_state, ref_points, psi_ref, last_index)
+
+        # # 获取最优油门和转向输入
+        # estimated_throttle = u_optimal[0]
+        # steer_input = u_optimal[1]
+
+        # # 处理减速情况
+        # if estimated_throttle < 0:
+        #     # 如果估计的油门小于0，意味着需要减速或刹车
+        #     brake_input = max(estimated_throttle, -1)  # 限制刹车输入在[-1, 0]之间
+        #     throttle_input = 0  # 油门设为0
+        # else:
+        #     # 否则，继续使用估计的油门值
+        #     brake_input = 0
+        #     throttle_input = min(estimated_throttle, 1)  # 限制油门值在[0, 1]之间
+
+        # # 应用控制输入
+        # vehicle.apply_control(carla.VehicleControl(throttle=throttle_input, steer=steer_input, brake=brake_input))
