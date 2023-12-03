@@ -10,16 +10,16 @@ class C_k(IntEnum):
 
 
 class Car_km():
-    def __init__(self, state, dt=0.1, nt=4, L=4):
+    def __init__(self, state, dt=0.01, nt=4, L=4):
         self.L = L
         self.nx = 5
         self.nu = 2
         self.state = np.zeros(self.nx)
         self.state[:nt] = state
-        self.state[C_k.V_km] = 50
+        self.state[C_k.V_km] = 0
         self.u = np.zeros(self.nu)
-        self.q = np.diag([10.0, 10.0, 0.1, 1])
-        self.r = np.diag([1, 1]) 
+        self.q = np.diag([1, 1, 1, 1])
+        self.r = np.diag([1, 10]) 
         self.dt = dt
         self.lasy_index = 0
 
@@ -123,8 +123,8 @@ class Car_km():
         opti.subject_to(X[:, 0] == error0)
         
         # Control input constraints
-        u_min = [-50, -np.pi / 3]
-        u_max = [50, np.pi / 3]
+        u_min = [-1, -np.pi/6]
+        u_max = [1, np.pi/6]
         for j in range(nu):
             opti.subject_to(opti.bounded(u_min[j], U[j, :], u_max[j]))
         
@@ -151,7 +151,7 @@ class Car_km():
             
             # Update the initial error for the next time step
             state_prej = predicted_state
-        print('this is the input', u_optimal_list[0])
+        # print('this is the input', u_optimal_list[0])
 
         return u_optimal_list[0], predicted_trajectories
     
@@ -182,6 +182,20 @@ class Car_km():
     def deg2rad(self,angle):
         return angle * np.pi / 180
     
+    def normalize_steering(self, steering_angle_degrees):
+    # Convert degrees to radians
+        steering_angle_radians = steering_angle_degrees * (np.pi / 180)
+
+        # Constants for Carla's steering range in radians
+        min_steering_radians = -70 * (np.pi / 180)
+        max_steering_radians = 70 * (np.pi / 180)
+
+        # Normalize the steering value to the range [-1.0, 1.0]
+        normalized_steering = ((steering_angle_radians - min_steering_radians) / 
+                            (max_steering_radians - min_steering_radians)) * 2 - 1
+
+        return normalized_steering
+    
     def simulate(self,outside_carla_state=np.zeros(4),ref_points=None, psi_ref=None,last_index=None):
         if last_index is None:
             last_index = self.last_index
@@ -191,6 +205,9 @@ class Car_km():
         state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]\
             =outside_carla_state[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]]
         state_carla[C_k.T]=self.state[C_k.T]
+        # print('reference point:', psi_ref)
+        print('this is states from carla', outside_carla_state)
+
         #here, try to make some difference between the carla and self.state
         # state_carla[C_k.Psi]=state_carla[C_k.Psi]+0.01*np.pi
         # state_carla[C_k.V_km]=state_carla[C_k.V_km]+0.1
@@ -198,9 +215,10 @@ class Car_km():
         
         current_position = state_carla[[C_k.X_km, C_k.Y_km]].T
         target_point, target_idx = self.find_target_point(ref_points, current_position, \
-                                                          1,last_index)
+                                                          8,last_index)
         last_index = target_idx
-        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 3])
+        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx],25])
+        print('This is the reference state:', ref_state)
         error = state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
         heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
         error[2] = heading_error
@@ -210,15 +228,20 @@ class Car_km():
         predicted_trajectories = np.array(predicted_trajectories)
         self.state = self.car_F(state_carla, u_optimal, self.dt).full().flatten()
         print('this is the state in km', self.state)
-        #here, return the u_optimal for carla to use,with degree
         u_optimal[1]=self.rad2deg(u_optimal[1])
+        steer_ratio = 16
+        u_optimal[1] = u_optimal[1] * steer_ratio / 460 # 460 here is the steer single direction max degree
+        print('these are the inputs', u_optimal)
+        # u_optimal[1] = self.normalize_steering(u_optimal[1])
+        #here, return the u_optimal for carla to use,with degree
+        # u_optimal[1]=self.rad2deg(u_optimal[1])
 
-        #since the max of carla is form -75 to 75, so we need to limit the steering angle and scale it
-        if u_optimal[1]>75:
-            u_optimal[1]=75 
-        elif u_optimal[1]<-75:
-            u_optimal[1]=-75
-        u_optimal[1]=u_optimal[1]/75
+        # #since the max of carla is form -75 to 75, so we need to limit the steering angle and scale it
+        # if u_optimal[1]>75:
+        #     u_optimal[1]=75 
+        # elif u_optimal[1]<-75:
+        #     u_optimal[1]=-75
+        # u_optimal[1]=u_optimal[1]/75
 
         return u_optimal, predicted_trajectories,last_index
 

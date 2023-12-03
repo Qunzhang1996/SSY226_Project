@@ -92,7 +92,7 @@ def main(vehicle, car_flag, route):
     # concate x_ref and y_ref as 2d array, shape of (N,2)
     ref_points = np.vstack([x_ref, y_ref]).T
     # Initialize car model
-    car = Car_km(state=np.array([110 , 235,np.pi/4, 0]))#notice the forth element is time 
+    car = Car_km(state=np.array([110 , 235, np.pi/4, 0]))   # notice the forth element is time 
     #To change the initial velocity, change the in the class Car_km
     #TODO:  
     # self.state[C_k.V_km] = 10, #CHANGE HERE!!!!!!!!
@@ -110,7 +110,7 @@ def main(vehicle, car_flag, route):
 
     plt.ion()
 
-    for i in range(130):
+    for i in range(250):
 
         plt.cla()
 
@@ -130,6 +130,7 @@ def main(vehicle, car_flag, route):
         ##############################################################
         estimated_throttle = u_optimal[0]
         steer_input = u_optimal[1]
+        print('The steering input to carla is this shit:', steer_input)
         vehicle.apply_control(carla.VehicleControl(throttle=estimated_throttle, steer=steer_input))
 
         # Visualize the predicted trajectories
@@ -210,8 +211,8 @@ def get_state(vehicle):
     x = vehicle_loc.x 
     y = vehicle_loc.y 
     psi = math.radians(vehicle_rot.yaw)  # Convert yaw to radians
-    # v = math.sqrt(vehicle_vel.x**2 + vehicle_vel.y**2)
-    v = vehicle_vel.length()  #converting it to km/hr
+    v = math.sqrt(vehicle_vel.x**2 + vehicle_vel.y**2)
+    # v = vehicle_vel.length()  #converting it to km/hr
 
     return x, y, psi, v
 
@@ -314,7 +315,7 @@ def drive_vehicle(vehicle, route, other_vehicle, car_flag):
         # Additional conditions or user input for stopping the simulation
         # Calculate distance between the vehicles
         distance_to_other_vehicle = calculate_distance(vehicle, other_vehicle)
-        print(distance_to_other_vehicle)
+        # print(distance_to_other_vehicle)
 
         # Check if the distance is below a threshold
         if distance_to_other_vehicle < 20:
