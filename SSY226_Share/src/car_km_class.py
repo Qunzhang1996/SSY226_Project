@@ -9,7 +9,7 @@ from vehicle_class import C, ST,C_k,Vehicle
 # from kinematic_test import VehicleKinematic
 import warnings
 warnings.simplefilter("error")
-
+nt=4
 class Car_km(Vehicle):
     def __init__(self, state, dt, state_km=np.zeros(5)):
         super().__init__(state)
@@ -430,7 +430,7 @@ class Car_km(Vehicle):
         a_km, delta = u[0], u[1]
         dot_x_km = v_km*np.cos(psi)
         dot_y_km = v_km*np.sin(psi)
-        dot_psi = v_km/L*np.tan(delta)
+        dot_psi = v_km/self.L*np.tan(delta)
         dot_t = 1
         dot_v_km = a_km
         dot_x = cs.vertcat(dot_x_km, dot_y_km, dot_psi, dot_t, dot_v_km)
@@ -521,8 +521,8 @@ class Car_km(Vehicle):
         opti.subject_to(X[:, 0] == error0)
         # Control input constraints
         # Control input constraints
-        u_min = [-5, -np.pi / 6]
-        u_max = [5, np.pi / 6]
+        u_min = [-1, -np.pi / 6]
+        u_max = [1, np.pi / 6]
 
         for j in range(nu):
             opti.subject_to(opti.bounded(u_min[j], U[j, :], u_max[j]))

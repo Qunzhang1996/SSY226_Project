@@ -279,7 +279,7 @@ class Car_km(Vehicle):
         n_at_end = (P_road[0]/2 * (cs.tanh(P_road[1]*(s[-1]-P_road[2]))+1)+P_road[3]
                   + P_road[4]/2 * (cs.tanh(P_road[5]*(s[-1]-P_road[6]))+1)+P_road[7])/2
         # n_at_end = 1
-        J = p_weight_a_s*cs.sumsqr(a_s) + p_weight_a_n * cs.sumsqr(a_n) + 0.1*1e-1*cs.sumsqr(
+        J = p_weight_a_s*cs.sumsqr(aqun_s) + p_weight_a_n * cs.sumsqr(a_n) + 0.1*1e-1*cs.sumsqr(
             v_s - p_v_s_nominal) + 1e3*cs.sumsqr(v_n[-1]) + 1e2*cs.sumsqr(n[-1] - n_at_end) # - p_nf)  # 1e3*(n[-1])**2 #+
         for i in range(N+1):
             # penalty on the distance to first of the surrounding vehicles
@@ -627,8 +627,8 @@ class Car_km(Vehicle):
         opti.subject_to(X[:, 0] == error0)
         # Control input constraints
         # Control input constraints
-        u_min = [-5, -np.pi / 6]
-        u_max = [5, np.pi / 6]
+        u_min = [-1, -np.pi / 6]
+        u_max = [1, np.pi / 6]
 
         for j in range(nu):
             opti.subject_to(opti.bounded(u_min[j], U[j, :], u_max[j]))
@@ -683,6 +683,19 @@ class Car_km(Vehicle):
         n=y
         return np.array([v_s, s, n, t, v_n])
     
+    def transformation_km2mp_withoutT(self, state):
+        """Transfer from  km state to mass_point state without time"""
+        x_km, y_km, psi, v_km = state[0], state[1], state[2], state[3]
+        x = x_km
+        y = y_km
+        psi = np.arctan2(np.sin(psi), np.cos(psi))
+        v = v_km
+        v_s=v*np.cos(psi)
+        v_n=v*np.sin(psi)
+        s=x
+        n=y
+        return np.array([v_s, s, n, v_n])
+    
     def transformation_mp2km(self, state):
         """Transfer from mass_point to km state"""
         v_s, s, n, t, v_n = state[0], state[1], state[2], state[3], state[4]
@@ -691,6 +704,16 @@ class Car_km(Vehicle):
         psi = np.arctan2(np.sin(np.arctan2(v_n, v_s)), np.cos(np.arctan2(v_n, v_s)))
         v_km = np.sqrt(v_s**2+v_n**2)
         return np.array([x_km, y_km, psi, t, v_km])
+    
+
+    def transformation_mp2km_withoutT(self, state):
+        """Transfer from mass_point to km state without considering time"""
+        v_s, s, n, v_n = state[0], state[1], state[2], state[3]
+        x_km = s
+        y_km = n
+        psi = np.arctan2(np.sin(np.arctan2(v_n, v_s)), np.cos(np.arctan2(v_n, v_s)))
+        v_km = np.sqrt(v_s**2+v_n**2)
+        return np.array([x_km, y_km, psi, v_km])
 
     def input_transform(self, u):
         """Transfer from km input to mass_point input, a, delta to ax,ay"""
@@ -709,8 +732,6 @@ class Car_km(Vehicle):
         elif delta < -np.pi/2:
             delta = delta + np.pi
         return np.array([a, delta])
-
-
 
 
     def simulate(self, dt, outside_carla_state=np.zeros([5,1])):
@@ -914,6 +935,25 @@ class Truck_CC(Car_km):
         self.history_control.append(u)
         self.history_v_ref.append(self.v_ref)
         return u_optimal_km
+    
+
+
+def get_state(vehicle):
+    vehicle_pos = vehicle.get_transform()
+    vehicle_loc = vehicle_pos.location
+    vehicle_rot = vehicle_pos.rotation
+    vehicle_vel = vehicle.get_velocity()
+
+    # Extract relevant states
+    x = vehicle_loc.x 
+    y = vehicle_loc.y 
+    psi = math.radians(vehicle_rot.yaw)  # Convert yaw to radians
+    # v = math.sqrt(vehicle_vel.x**2 + vehicle_vel.y**2)
+    v = vehicle_vel.length()  #converting it to km/hr
+
+    return x, y, psi, v
+
+
 
 def main():
     #################
@@ -925,7 +965,7 @@ def main():
     replanning_iterations = 100
     # replanning_iterations = 10
     # P_road_v1 = [0, 0.1, 0, -0.5*lane_width,
-    #             0, 0.1, 0, 0.5*lane_width]
+    #             0, 0.1, 0, 0.5*lane_width]exit( )
     P_road_v1 = [0, 0.1, 0, 37.35755-0.5 * lane_width,
              0, 0.1, 0, 37.35755+0.5 * lane_width]
 
@@ -933,7 +973,7 @@ def main():
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([15, -266.722, 37.35755, 0],dt=dt)
+    v1 = Truck_CC([25, -266.722, 37.35755, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
@@ -983,11 +1023,48 @@ def main():
         # Simulate all vehicles for steps_between_replanning steps
         for _ in range(steps_between_replanning):
             for v in [v1, v2]:
-                v.simulate(dt)
+
+                # Simulate all vehicles
+                if v==v1:#control the truck
+                    u_optimal=v.simulate(dt)
+                    estimated_throttle = u_optimal[0]
+                    steer_input = np.sin(u_optimal[1])
+                    if steer_input < 0:
+                        brake_input =  np.sin(estimated_throttle) # using sin to make sure the brake_input is in [0,1]
+                        throttle_input = 0  # throttle is 0 when brake is applied
+                    else:
+                        throttle_input = np.sin(estimated_throttle)
+                        brake_input = 0
+                    # vehicle1.apply_control(carla.VehicleControl(throttle=throttle_input, steer=steer_input, brake=brake_input)) 
+                else:#control the car
+                    u_optimal=v.simulate(dt)
+                    estimated_throttle = u_optimal[0]
+                    steer_input = np.sin(u_optimal[1])
+                    if steer_input < 0:
+                        brake_input =  np.sin(estimated_throttle) # using sin to make sure the brake_input is in [0,1]
+                        throttle_input = 0  # throttle is 0 when brake is applied
+                    else:
+                        throttle_input = np.sin(estimated_throttle)
+                        brake_input = 0
+                    # vehicle1.apply_control(carla.VehicleControl(throttle=throttle_input, steer=steer_input, brake=brake_input)) 
+
 
                 # Read states of all vehicles
                 v1_state = v1.get_state()
                 v2_state = v2.get_state()
+                # Read states of all vehicles from the carla
+                # v1_state = get_state(vehicle1)
+                # v2_state = get_state(vehicle1)
+                # print("v1_state",v1_state)
+            
+
+                #transfer the state from pm to Carla
+                v1_state=v1.transformation_mp2km_withoutT(v1_state)
+                v2_state=v2.transformation_mp2km_withoutT(v2_state)
+
+                #transfer the state from Carla to pm
+                v1_state=v1.transformation_km2mp_withoutT(v1_state)
+                v2_state=v2.transformation_km2mp_withoutT(v2_state)
 
                 # Update internal twin vehicles
                 v1.update_twin_state('v2', v2_state)
@@ -1006,11 +1083,14 @@ def main():
     # plot state and history
     # v0_history_state = np.array(v0.history_state).T
     v1_history_state = np.array(v1.history_state).T
+
+
     v2_history_state = np.array(v2.history_state).T
 
     # v0_history_planned = v0.history_planned_trajectory
     v1_history_planned = v1.history_planned_trajectory
     v2_history_planned = v2.history_planned_trajectory
+
 
     # line_v0, = plt.plot(v0_history_state[ST.S], v0_history_state[ST.N])
     line_v1, = plt.plot(v1_history_state[ST.S], v1_history_state[ST.N])

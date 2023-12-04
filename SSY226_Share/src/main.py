@@ -26,7 +26,7 @@ def main():
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([15, -266.722, 37.35755, 0],dt=dt)
+    v1 = Truck_CC([20, -266.722, 37.35755, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
@@ -195,7 +195,7 @@ def main():
     #             plt.xlabel("S-axis")
     #             plt.ylabel("Speed")
 
-    #             plt.pause(0.01)  # 稍微暂停，以便观察更新
+    #             plt.pause(0.001)  # 稍微暂停，以便观察更新
 
     # plt.ioff()  # 关闭交互模式
     # plt.show()
