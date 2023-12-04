@@ -4,11 +4,117 @@ import math
 import scipy
 import casadi as cs
 from enum import IntEnum
-from vehicle_class import C, ST,C_k,Vehicle
-# from kalmanfilter import ExtendedKalmanFilter
-# from kinematic_test import VehicleKinematic
+
 import warnings
 warnings.simplefilter("error")
+
+# Structure for name convenience
+nt = 4  # number of variables in trajectories
+class ST(IntEnum):
+    V, S, N, T = range(nt)
+
+class C(IntEnum):
+    V_S, S, N, T, V_N = range(5)
+# states: v_s longitudinal speed, v_n lateral speed, s longitudinal position, time, n lateral position
+
+class C_k(IntEnum):
+    X_km, Y_km, Psi, T, V_km =range(5)
+
+#follow vehicle kinematic, define new C_K
+#states: X longitudinal, Y lateral, Psi heading, T time, V velocity
+
+class VehicleTwin:
+    """Useful class to represent other vehicles, digital twin"""
+
+    def __init__(self, state):
+        self.state = state
+        self.desired_trajectory = None
+        self.planned_trajectory = None
+        self.interpolated_desired_trajectory = None
+        self.interpolated_planned_trajectory = None
+
+    def update_state(self, state):
+        """Take current state of another vehicle"""
+        self.state = state
+
+    def update_planned_desired_trajectories(self, planned_trajectory, desired_trajectory):
+        """Take planned and desired trajectories of another vehicle"""
+        self.desired_trajectory = desired_trajectory
+        self.planned_trajectory = planned_trajectory
+
+    def interpolate_trajectories(self, current_time, planning_points, dt):
+        """Compute trajectory points of another vehicles at convenient time steps"""
+
+        if self.planned_trajectory is not None:
+            # Interpolate/extrapolate previously received
+            self.interpolated_planned_trajectory = scipy.interpolate.interp1d(
+                self.planned_trajectory[ST.T, :], self.planned_trajectory, fill_value='extrapolate', kind='cubic')(current_time+np.arange(planning_points)*dt)
+        else:
+            # Planned trajectory is either not yet received or not computed by that vehicle
+            # Use a generic model to predict future points
+            self.interpolated_planned_trajectory = np.zeros(
+                (nt, planning_points))
+            self.interpolated_planned_trajectory[ST.V] = np.ones(
+                planning_points) * self.state[ST.V]
+            self.interpolated_planned_trajectory[ST.S] = self.state[ST.S] + (
+                current_time - self.state[ST.T]) * self.state[ST.V] + np.arange(planning_points)*self.state[ST.V]*dt
+            self.interpolated_planned_trajectory[ST.N] = np.ones(
+                planning_points) * self.state[ST.N]
+            self.interpolated_planned_trajectory[ST.T] = current_time + np.arange(
+                planning_points)*dt
+
+        if self.desired_trajectory is not None:
+            self.interpolated_desired_trajectory = scipy.interpolate.interp1d(
+                self.desired_trajectory[ST.T, :], self.desired_trajectory, fill_value='extrapolate', kind='cubic')(current_time+np.arange(planning_points)*dt)
+        else:
+            # Desired trajectory is not computed by all vehicles at all moments so do nothing
+            self.interpolated_desired_trajectory == None
+
+
+class Vehicle:
+    """Common class for all vehicles"""
+
+    def __init__(self, state):
+        self.vehicles = {}
+        self.state = state
+        self.planning_dt = 0.8*(51/31)*0.7
+        self.planning_points = 31
+        self.planned_trajectory = None
+        self.desired_trajectory = None
+        self.control_trajectory = None
+        self.lane_width = 3.5 # m
+
+        self.history_state = [np.array(self.get_state())]
+        self.history_planned_trajectory = []
+        self.history_desired_trajectory = []
+
+        self.name = 'v'
+
+    def add_vehicle_twin(self, name, state):
+        self.vehicles[name] = VehicleTwin(state)
+
+    def get_state(self):
+        return self.state
+
+    def update_state(self, state):
+        """Update the vehicle state with information from CAN"""
+        self.state = state
+
+    def update_twin_state(self, name_id, state):
+        self.vehicles[name_id].update_state(state)
+
+    def receive_planned_desired_trajectories(self, name_id, planned_trajectory, desired_trajectory):
+        self.vehicles[name_id].update_planned_desired_trajectories(
+            planned_trajectory, desired_trajectory)
+        
+    def save_history(self,name):
+        import pickle
+        with open(name+'.pickle', 'wb') as handle:
+            data = {}
+            data['history_state'] = np.array(self.history_state).T
+            data['history_planned_trajectory'] = self.history_planned_trajectory
+            pickle.dump(data, handle)
+
 
 class Car_km(Vehicle):
     def __init__(self, state, dt, state_km=np.zeros(5)):
@@ -430,7 +536,7 @@ class Car_km(Vehicle):
         a_km, delta = u[0], u[1]
         dot_x_km = v_km*np.cos(psi)
         dot_y_km = v_km*np.sin(psi)
-        dot_psi = v_km/L*np.tan(delta)
+        dot_psi = v_km/self.L*np.tan(delta)
         dot_t = 1
         dot_v_km = a_km
         dot_x = cs.vertcat(dot_x_km, dot_y_km, dot_psi, dot_t, dot_v_km)
@@ -672,19 +778,335 @@ class Car_km(Vehicle):
         self.history_state.append(self.get_state())
         self.history_control.append(u_optimal_mp)
         return u_optimal
+    
+
+class Truck_CC(Car_km):
+    def __init__(self, state, dt):
+        super().__init__(state, dt)
+        self.steps_between_cc_replanning = 100
+        self.v_ref = state[C.V_S]
+        self.L = 8.8
+        self.a = 1
+        self.b = 1.5
+        self.delta = 4 
+        self.T = 3
+        self.v0 = 10
+        self.s0 = 20
+        self.counter_cc_replanning = 0
+        self.q = np.diag([1,100,100,1])
+        self.r = np.diag([1,1])*0.1
+        nt=4
+        self.history_v_ref = [state[C.V_S]]
+
+    def truck_f(self, x, u):
+        """Continues truck model"""
+        # x: v, s, n, t
+        return np.array((u, x[0], 0, 1))
+
+    def truck_F(self, x, u, dt):
+        """Discrete truck model"""
+        k1 = self.truck_f(x, u)
+        k2 = self.truck_f(x+dt/2*k1, u)
+        k3 = self.truck_f(x+dt/2*k2, u)
+        k4 = self.truck_f(x+dt*k3, u)
+        return x+dt/6*(k1+2*k2+2*k3+k4)
+
+    def CC(self,v_ref, state):
+        """Compute new state using CC after steps_between_cc_replanning*dt seconds"""
+        history_velocity = []
+        for _ in range(self.steps_between_cc_replanning):
+            a_free = self.a*(1-np.power(state[ST.V]/v_ref, self.delta)) \
+                if state[ST.V] <= v_ref \
+                else -self.b*(1-np.power(v_ref/state[ST.V], self.a*self.delta/self.b))
+            state = self.truck_F(state, a_free, self.dt)
+            history_velocity.append(state[ST.V])
+        return state, history_velocity   
+
+    def func_v_ref(self, v_ref, s_final, state, velocity_intermediate_points):
+        """Compute the difference between the desired final distance s_final and output of CC for a give v_ref"""
+        cc_state, history_velocity = self.CC(v_ref, state)
+        J = np.power(s_final - cc_state[ST.S],2) # cost to deviate from the given s_final
+        J += 10*np.sum(np.multiply(np.exp(np.arange(-self.steps_between_cc_replanning+1,1)),np.power(history_velocity-velocity_intermediate_points,2))) # cost to deviated from the given velocity profile
+        return J 
+    
+    
+    def compute_v_ref(self):
+        # Compute v_ref using the CC model for a given trajectory
+        state = self.get_state()
+        tt = self.planned_trajectory[C.T, :]
+        S_state_guess = scipy.interpolate.interp1d(tt,self.planned_XU0[C.S::(self.nx+self.nu)],kind='cubic')(state[ST.T] + self.dt*self.steps_between_cc_replanning)
+        t_intermediate_points = self.dt*np.arange(self.steps_between_cc_replanning) + self.dt + state[ST.T]
+        velocity_intermediate_points = scipy.interpolate.interp1d(tt, self.planned_XU0[C.V_S::(self.nx+self.nu)], fill_value='extrapolate', kind='cubic')(t_intermediate_points)
+        # root_v_ref, infodict, ier, mesg = scipy.optimize.fsolve(func_v_ref,state_guess[ST.V],args=(state_guess[ST.S],state, velocity_intermediate_points),full_output=True,xtol=0.1)
+        res = scipy.optimize.minimize_scalar(self.func_v_ref,bounds=(16,26),args=(S_state_guess,state, velocity_intermediate_points),method='bounded')
+        print(state[ST.T], res.x, res.nfev, res.success, res.message)
+        self.v_ref = res.x 
+    
+    
+    def simulate(self, dt,outside_carla_state=np.zeros([5,1])):
+
+        #To test, try to transform the pm state to km state
+        # print('this is the state', self.state)
+        outside_carla_state=self.transformation_mp2km(self.state).reshape(-1,1)
+        # print('this is the state in km', outside_carla_state)
+
+        #transfer the state from Carla to pm
+        self.state=self.transformation_km2mp(outside_carla_state).ravel()
+        # print('this is the state in pm', self.state)
+        # exit()
 
 
-    # def simulate(self, dt):
-    #     """Compute new state in simulation"""
-    #     # Trajectory following using LQR
-    #     e = np.zeros([self.nx-1,1])
-    #     tt = self.planned_trajectory[C.T, :]
-    #     t = self.state[C.T]
-    #     e[0] = self.state[C.V_S] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_S::(self.nx+self.nu)],kind='cubic')(t+0.5)
-    #     e[1] = self.state[C.S] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.S::(self.nx+self.nu)],kind='cubic')(t+0.5)
-    #     e[2] = self.state[C.N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.N::(self.nx+self.nu)],kind='cubic')(t+0.5)
-    #     e[3] = self.state[C.V_N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_N::(self.nx+self.nu)],kind='cubic')(t+0.5)
-    #     u = -np.matmul(self.R,e)
-    #     self.state = self.car_F(self.state, u, dt).full().ravel()
-    #     self.history_state.append(self.get_state())
-    #     self.history_control.append(u)
+        if self.counter_cc_replanning == 0:
+            self.compute_v_ref()
+            self.counter_cc_replanning = self.steps_between_cc_replanning
+        self.counter_cc_replanning -= 1
+        
+        # Trajectory following using LQR only for a_n
+        e = np.zeros([self.nx-1,1])
+        tt = self.planned_trajectory[C.T, :]
+        t = self.state[C.T]
+        e[0] = self.state[C.V_S] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_S::(self.nx+self.nu)],kind='cubic')(t)
+        e[1] = self.state[C.S] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.S::(self.nx+self.nu)],kind='cubic')(t)
+        e[2] = self.state[C.N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.N::(self.nx+self.nu)],kind='cubic')(t)
+        e[3] = self.state[C.V_N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_N::(self.nx+self.nu)],kind='cubic')(t)
+        u = -np.matmul(self.R,e)
+        # a_n = u[1]
+        a_n=0
+        
+        # Trajectory following using CC
+        s_leading = math.inf
+        v_leading = 0
+        for name_id in self.vehicles:
+            if self.vehicles[name_id].state[ST.S] > self.state[ST.S] and \
+                    self.vehicles[name_id].state[ST.N] > -self.lane_width/2 and \
+                    self.state[ST.S] < s_leading:
+                s_leading = self.vehicles[name_id].state[ST.S]
+                v_leading = self.vehicles[name_id].state[ST.V]
+        dv = self.state[ST.V] - v_leading
+        s = s_leading - self.state[ST.S]
+        v0_local = self.v_ref
+        s_star = self.s0 + max(0, v0_local*self.T +
+                               v0_local*dv/(2*np.sqrt(self.a*self.b)))
+        z = s_star/s
+        a_free = self.a*(1-np.power(self.state[ST.V]/v0_local, self.delta)) \
+            if self.state[ST.V] <= v0_local \
+            else -self.b*(1-np.power(v0_local/self.state[ST.V], self.a*self.delta/self.b))
+        if self.state[ST.V] < v0_local:  # CHANGE FROM <=
+            dvdt = self.a*(1-z**2) if z >= 1 else a_free * \
+                (1-np.power(z, min(100, 2*self.a/a_free)))  # MAX IN POWER
+        else:
+            dvdt = a_free+self.a*(1-z**2) if z >= 1 else a_free
+        a_s = dvdt
+        u = [a_s, a_n]
+
+
+        #to get the optimal control input of the truck, using transformation_inv
+        u_optimal_km=self.input_transform_inv(u).reshape(-1,1)
+        #set the limitation for the control input(accleration between -1 and 1)
+        u_optimal_km[0]=min(1,max(-1,u_optimal_km[0]))
+        #set the limitation for the control input(steering angle between -0.5 and 0.5)
+        u_optimal_km[1]=min(0.5,max(-0.5,u_optimal_km[1]))
+        # print('this is the optimal control input of the truck', u_optimal_km)
+
+        self.state = self.car_F(self.state, u, dt).full().ravel()
+
+        self.history_state.append(self.get_state())
+        self.history_control.append(u)
+        self.history_v_ref.append(self.v_ref)
+        return u_optimal_km
+
+def main():
+    #################
+    # In simulation
+    dt = 0.02  # simulations step in seconds
+    lane_width = 3.5 # m
+    steps_between_replanning = 25 #todo
+    # steps_between_replanning = 100
+    replanning_iterations = 100
+    # replanning_iterations = 10
+    # P_road_v1 = [0, 0.1, 0, -0.5*lane_width,
+    #             0, 0.1, 0, 0.5*lane_width]
+    P_road_v1 = [0, 0.1, 0, 37.35755-0.5 * lane_width,
+             0, 0.1, 0, 37.35755+0.5 * lane_width]
+
+
+    # Create two independent objects to represent two vehicles
+
+    # CC Truck
+    v1 = Truck_CC([15, -266.722, 37.35755, 0],dt=dt)
+    v1.P_road_v = P_road_v1
+    v1.name = 'v1'
+
+    # Only used for Car (CAV)
+    P_road_v = [lane_width, 0.1, 80, 37.35755-1.5 * lane_width,
+             lane_width, 0.1, 0, 37.35755-0.5 * lane_width]
+    
+    v2 = Car_km([10, -66.72, 37.35755-lane_width, 0],dt=dt)
+    v2.P_road_v = P_road_v
+    v2.lane_width = lane_width
+    v2.name = 'v2'
+
+    # Compute planned and desired trajectories of CAV without sending them to others, needed for simulation
+    v1.compute_planned_desired_trajectory()
+    v2.compute_planned_desired_trajectory()
+
+    # Simulate the system for some time without updates from other vehicles
+    for _ in range(steps_between_replanning):
+            for v in [v1, v2]:
+                v.simulate(dt)
+
+
+    # Each vehicle outputs own state
+    v1_state = v1.get_state()
+    v2_state = v2.get_state()
+
+    # We send and receive it over network
+
+    # Create a twin vehicle inside v1 with the current state, CV
+    v1.add_vehicle_twin('v2', v2_state)
+    # Create a twin vehicle inside v2 with the current state, CAV
+    v2.add_vehicle_twin('v1', v1_state)
+
+
+    for _ in range(replanning_iterations):
+
+        # Compute planned and desired trajectories
+        v1_planned_trajectory, v1_desired_trajectory = v1.compute_planned_desired_trajectory()
+        v2_planned_trajectory, v2_desired_trajectory = v2.compute_planned_desired_trajectory()
+
+        # Receive planned and desired trajectories of other vehicles inside twin vehicles
+        v2.receive_planned_desired_trajectories(
+            'v1', v1_planned_trajectory, v1_desired_trajectory)
+        v1.receive_planned_desired_trajectories(
+            'v2', v2_planned_trajectory, v2_desired_trajectory)
+
+        # Simulate all vehicles for steps_between_replanning steps
+        for _ in range(steps_between_replanning):
+            for v in [v1, v2]:
+                v.simulate(dt)
+
+                # Read states of all vehicles
+                v1_state = v1.get_state()
+                v2_state = v2.get_state()
+
+                # Update internal twin vehicles
+                v1.update_twin_state('v2', v2_state)
+                v2.update_twin_state('v1', v1_state)
+
+
+    # plot road
+    plt.subplot(2, 1, 1)
+    ss = np.linspace(-900, 2000, 1000)
+    road_right = P_road_v[0]/2 * \
+        (np.tanh(P_road_v[1]*(ss-P_road_v[2]))+1)+P_road_v[3]
+    road_left = P_road_v[4]/2*(np.tanh(P_road_v[5]*(ss-P_road_v[6]))+1)+P_road_v[7]
+    plt.plot(ss, road_right, 'k')
+    plt.plot(ss, road_left, 'k')
+
+    # plot state and history
+    # v0_history_state = np.array(v0.history_state).T
+    v1_history_state = np.array(v1.history_state).T
+    v2_history_state = np.array(v2.history_state).T
+
+    # v0_history_planned = v0.history_planned_trajectory
+    v1_history_planned = v1.history_planned_trajectory
+    v2_history_planned = v2.history_planned_trajectory
+
+    # line_v0, = plt.plot(v0_history_state[ST.S], v0_history_state[ST.N])
+    line_v1, = plt.plot(v1_history_state[ST.S], v1_history_state[ST.N])
+    plt.plot(v1_history_state[ST.S][-1], v1_history_state[ST.N][-1], 'o', color=line_v1.get_color())
+    line_v2, = plt.plot(v2_history_state[ST.S], v2_history_state[ST.N])
+    plt.plot(v2_history_state[ST.S][-1], v2_history_state[ST.N][-1], 'o', color=line_v2.get_color())
+
+    for vhp in v1_history_planned:
+        plt.plot(vhp[ST.S, :], vhp[ST.N, :], ':',
+                color=line_v1.get_color(), linewidth=0.7)
+    for vhp in v2_history_planned:
+        plt.plot(vhp[ST.S, :], vhp[ST.N, :], ':',
+                color=line_v2.get_color(), linewidth=0.7)
+
+    plt.subplot(2, 1, 2)
+    line_v1, = plt.plot(v1_history_state[ST.S], v1_history_state[ST.V])
+    line_v2, = plt.plot(v2_history_state[ST.S], v2_history_state[ST.V])
+    for vhp in v1_history_planned:
+        plt.plot(vhp[ST.S, :], vhp[ST.V, :], ':',
+                color=line_v1.get_color(), linewidth=0.7)
+    for vhp in v2_history_planned:
+        plt.plot(vhp[ST.S, :], vhp[ST.V, :], ':',
+                color=line_v2.get_color(), linewidth=0.7)
+    if hasattr(v1, "history_v_ref"):
+        plt.plot(v1_history_state[ST.S], v1.history_v_ref, '--')
+    if hasattr(v2, "history_v_ref"):
+        plt.plot(v2_history_state[ST.S], v2.history_v_ref, '--')
+        
+
+    # v1.save_history('v1')
+    # v2.save_history('v2')
+
+    plt.show()
+
+
+
+
+
+
+
+    # plt.ion()
+
+    # for _ in range(replanning_iterations):
+    #     # ... 计算规划和期望轨迹的代码 ...
+
+    #     # 模拟所有车辆
+    #     for _ in range(steps_between_replanning):
+    #         for v in [v1, v2]:
+    #             v.simulate(dt)
+
+    #             # 读取所有车辆的状态
+    #             v1_state = v1.get_state()
+    #             v2_state = v2.get_state()
+
+    #             # 更新内部双车辆状态
+    #             v1.update_twin_state('v2', v2_state)
+    #             v2.update_twin_state('v1', v1_state)
+
+    #             # 绘图部分
+    #             plt.clf()  # 清除整个图形
+
+    #             # 绘制道路
+    #             plt.subplot(2, 1, 1)
+    #             plt.title("Road and Vehicle Trajectories")
+    #             ss = np.linspace(-900, 2000, 1000)
+    #             road_right = P_road_v[0]/2 * (np.tanh(P_road_v[1]*(ss-P_road_v[2]))+1)+P_road_v[3]
+    #             road_left = P_road_v[4]/2*(np.tanh(P_road_v[5]*(ss-P_road_v[6]))+1)+P_road_v[7]
+    #             plt.plot(ss, road_right, 'k', label='Right Edge of Road')
+    #             plt.plot(ss, road_left, 'k', label='Left Edge of Road')
+
+    #             # 绘制车辆当前位置和轨迹
+    #             v1_history_state = np.array(v1.history_state).T
+    #             v2_history_state = np.array(v2.history_state).T
+    #             plt.plot(v1_history_state[ST.S], v1_history_state[ST.N], label='Vehicle 1 Trajectory')
+    #             plt.plot(v2_history_state[ST.S], v2_history_state[ST.N], label='Vehicle 2 Trajectory')
+    #             plt.scatter(v1_history_state[ST.S][-1], v1_history_state[ST.N][-1], color='blue')
+    #             plt.scatter(v2_history_state[ST.S][-1], v2_history_state[ST.N][-1], color='red')
+
+    #             plt.legend()
+    #             plt.xlabel("S-axis")
+    #             plt.ylabel("N-axis")
+
+    #             # 绘制车辆速度
+    #             plt.subplot(2, 1, 2)
+    #             plt.title("Vehicle Speeds")
+    #             plt.plot(v1_history_state[ST.S], v1_history_state[ST.V], label='Vehicle 1 Speed')
+    #             plt.plot(v2_history_state[ST.S], v2_history_state[ST.V], label='Vehicle 2 Speed')
+    #             plt.legend()
+    #             plt.xlabel("S-axis")
+    #             plt.ylabel("Speed")
+
+    #             plt.pause(0.01)  # 稍微暂停，以便观察更新
+
+    # plt.ioff()  # 关闭交互模式
+    # plt.show()
+
+
+if __name__ == "__main__":
+    main()

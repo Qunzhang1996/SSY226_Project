@@ -16,7 +16,7 @@ class Car_km():
         self.nu = 2
         self.state = np.zeros(self.nx)
         self.state[:nt] = state
-        self.state[C_k.V_km] = 19
+        self.state[C_k.V_km] = 10
         self.u = np.zeros(self.nu)
         self.q = np.diag([10.0, 10.0, 1.0, 1.0])
         self.r = np.diag([0.01, 0.1]) 

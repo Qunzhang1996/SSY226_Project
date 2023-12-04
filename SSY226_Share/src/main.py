@@ -11,28 +11,30 @@ from truck_km_class import Truck_CC
 def main():
     #################
     # In simulation
-    nt=4
     dt = 0.02  # simulations step in seconds
     lane_width = 3.5 # m
-    steps_between_replanning = 25
+    steps_between_replanning = 25 #todo
     # steps_between_replanning = 100
     replanning_iterations = 100
     # replanning_iterations = 10
-    P_road_v1 = [0, 0.1, 0, -0.5*lane_width,
-                0, 0.1, 0, 0.5*lane_width]
+    # P_road_v1 = [0, 0.1, 0, -0.5*lane_width,
+    #             0, 0.1, 0, 0.5*lane_width]
+    P_road_v1 = [0, 0.1, 0, 37.35755-0.5 * lane_width,
+             0, 0.1, 0, 37.35755+0.5 * lane_width]
 
 
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([25, -416.25-70, 0, 0],dt=dt)
+    v1 = Truck_CC([15, -266.722, 37.35755, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
     # Only used for Car (CAV)
-    P_road_v = [lane_width, 0.1, 80, -1.5*lane_width,
-                lane_width, 0.1, 0, -0.5*lane_width]
-    v2 = Car_km([19, -397.53, -lane_width, 0],dt=dt)
+    P_road_v = [lane_width, 0.1, 80, 37.35755-1.5 * lane_width,
+             lane_width, 0.1, 0, 37.35755-0.5 * lane_width]
+    
+    v2 = Car_km([10, -66.72, 37.35755-lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'

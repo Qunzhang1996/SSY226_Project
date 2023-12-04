@@ -9,19 +9,22 @@ from car_km_class import Car_km
 
 import warnings
 warnings.simplefilter("error")
-nt=4
-L=8.47
 class Truck_CC(Car_km):
     def __init__(self, state, dt):
         super().__init__(state, dt)
         self.steps_between_cc_replanning = 100
         self.v_ref = state[C.V_S]
+        self.L = 8.8
         self.a = 1
         self.b = 1.5
-        self.delta = 4
+        self.delta = 4 
         self.T = 3
+        self.v0 = 10
         self.s0 = 20
         self.counter_cc_replanning = 0
+        self.q = np.diag([1,100,100,1])
+        self.r = np.diag([1,1])*0.1
+        nt=4
         self.history_v_ref = [state[C.V_S]]
 
     def truck_f(self, x, u):
@@ -54,6 +57,7 @@ class Truck_CC(Car_km):
         J = np.power(s_final - cc_state[ST.S],2) # cost to deviate from the given s_final
         J += 10*np.sum(np.multiply(np.exp(np.arange(-self.steps_between_cc_replanning+1,1)),np.power(history_velocity-velocity_intermediate_points,2))) # cost to deviated from the given velocity profile
         return J 
+    
     
     def compute_v_ref(self):
         # Compute v_ref using the CC model for a given trajectory
@@ -95,7 +99,8 @@ class Truck_CC(Car_km):
         e[2] = self.state[C.N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.N::(self.nx+self.nu)],kind='cubic')(t)
         e[3] = self.state[C.V_N] - scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_N::(self.nx+self.nu)],kind='cubic')(t)
         u = -np.matmul(self.R,e)
-        a_n = u[1]
+        # a_n = u[1]
+        a_n=0
         
         # Trajectory following using CC
         s_leading = math.inf
@@ -137,3 +142,4 @@ class Truck_CC(Car_km):
         self.history_state.append(self.get_state())
         self.history_control.append(u)
         self.history_v_ref.append(self.v_ref)
+        return u_optimal_km
