@@ -105,7 +105,7 @@ class Car_km():
         return R
 
     # Calculate the direction at each point
-    def compute_km_mpc(self, state, ref_states, N=10):
+    def compute_km_mpc(self, state, ref_states, N=6):
         nx = self.nx
         nu = self.nu
         nx = nx - 1
@@ -189,7 +189,7 @@ class Car_km():
         target_point = trajectory[target_idx]
         return target_point, target_idx
     
-    def find_target_trajectory(self, trajectory, point, psi_ref, V_ref=25, N=10):
+    def find_target_trajectory(self, trajectory, point, psi_ref, V_ref=25, N=6):
         # Calculate the squared Euclidean distance to each point in the trajectory
         distances = np.sum((trajectory[:,:2] - point) ** 2, axis=1)
         # Find the index of the closest point

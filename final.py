@@ -163,7 +163,7 @@ class Car_km(Vehicle):
         self.u_km = np.zeros(self.nu)
         
         
-    def get_state(self):
+    def  get_state(self):
         return self.state[:nt]
 
     def create_car_F(self):  # create a discrete model of the vehicle
@@ -279,7 +279,7 @@ class Car_km(Vehicle):
         n_at_end = (P_road[0]/2 * (cs.tanh(P_road[1]*(s[-1]-P_road[2]))+1)+P_road[3]
                   + P_road[4]/2 * (cs.tanh(P_road[5]*(s[-1]-P_road[6]))+1)+P_road[7])/2
         # n_at_end = 1
-        J = p_weight_a_s*cs.sumsqr(aqun_s) + p_weight_a_n * cs.sumsqr(a_n) + 0.1*1e-1*cs.sumsqr(
+        J = p_weight_a_s*cs.sumsqr(a_s) + p_weight_a_n * cs.sumsqr(a_n) + 0.1*1e-1*cs.sumsqr(
             v_s - p_v_s_nominal) + 1e3*cs.sumsqr(v_n[-1]) + 1e2*cs.sumsqr(n[-1] - n_at_end) # - p_nf)  # 1e3*(n[-1])**2 #+
         for i in range(N+1):
             # penalty on the distance to first of the surrounding vehicles
@@ -792,12 +792,15 @@ class Car_km(Vehicle):
         u_optimal_mp=self.input_transform(u_optimal)
         
         #transfer carla state to mp state
-        state_mp_carla=self.transformation_km2mp(state_carla)
+        # state_mp_carla=self.transformation_km2mp(state_carla)
+        self.state_km=self.car_F_km(state_carla,u_optimal,self.dt).full().ravel()
+        self.state=self.transformation_km2mp(self.state_km).ravel()
+
 
         #update the state of the pm vehicle
-        self.state = self.car_F(state_mp_carla, u_optimal_mp, dt).full().ravel()
+        # self.state = self.car_F(state_mp_carla, u_optimal_mp, dt).full().ravel()
         self.history_state.append(self.get_state())
-        self.history_control.append(u_optimal_mp)
+        self.history_control.append(np.array(u_optimal).reshape(-1,1))
         return u_optimal
     
 
@@ -935,8 +938,6 @@ class Truck_CC(Car_km):
         self.history_control.append(u)
         self.history_v_ref.append(self.v_ref)
         return u_optimal_km
-    
-
 
 def get_state(vehicle):
     vehicle_pos = vehicle.get_transform()
@@ -952,9 +953,6 @@ def get_state(vehicle):
     v = vehicle_vel.length()  #converting it to km/hr
 
     return x, y, psi, v
-
-
-
 def main():
     #################
     # In simulation
@@ -1083,13 +1081,24 @@ def main():
     # plot state and history
     # v0_history_state = np.array(v0.history_state).T
     v1_history_state = np.array(v1.history_state).T
+    v1_history_control=np.array(v1.history_control)
+    with open('save_truck_control.txt', 'w') as file:
+        for row in v1_history_control:
+            file.write(' '.join(map(str, row)) + '\n')
+
 
 
     v2_history_state = np.array(v2.history_state).T
+    v2_history_control=np.array(v2.history_control)
+    with open('save_car_control.txt', 'w') as file:
+        for row in v2_history_control:
+            row_str = ' '.join(str(item[0]) for item in row)
+            file.write(row_str + '\n')
 
     # v0_history_planned = v0.history_planned_trajectory
     v1_history_planned = v1.history_planned_trajectory
     v2_history_planned = v2.history_planned_trajectory
+    
 
 
     # line_v0, = plt.plot(v0_history_state[ST.S], v0_history_state[ST.N])
