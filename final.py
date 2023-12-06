@@ -126,7 +126,7 @@ class Car_km(Vehicle):
         self.state[:nt] = state # [v_s, s, n, t, v_n] # use slice to copy the value 
         self.state[C.V_N] = 0 # lateral speed is zero
         self.desired_XU0 = None 
-        self.v0 = 15
+        self.v0 = 10
         self.planned_XU0 = [0] * (self.nx*(self.planning_points)+self.nu*(self.planning_points - 1))
         self.planned_XU0[C.V_S::(self.nx+self.nu)] = np.linspace(self.state[C.V_S], self.v0,self.planning_points)
         self.planned_XU0[C.T::(self.nx+self.nu)] = self.state[C.T] + self.planning_dt*np.arange(self.planning_points)
@@ -971,15 +971,15 @@ def main():
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([15, -266.722, 37.35755, 0],dt=dt)
+    v1 = Truck_CC([10, -166.722, 37.35755, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
     # Only used for Car (CAV)
-    P_road_v = [lane_width, 0.1, 80, 37.35755-1.5 * lane_width,
+    P_road_v = [lane_width, 0.1, 100, 37.35755-1.5 * lane_width,
              lane_width, 0.1, 0, 37.35755-0.5 * lane_width]
     
-    v2 = Car_km([10, -166.72, 37.35755-lane_width, 0],dt=dt)
+    v2 = Car_km([10, -66.72, 37.35755-lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'
@@ -1101,7 +1101,7 @@ def main():
             file.write(row_str + '\n')
 
     with open('save_car_state.txt', 'w') as file:
-        for row in v2_history_state.T:
+        for row in v2_history_state[1:3].T:
             file.write(' '.join(map(str, row)) + '\n')
 
     # v0_history_planned = v0.history_planned_trajectory
