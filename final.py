@@ -126,7 +126,7 @@ class Car_km(Vehicle):
         self.state[:nt] = state # [v_s, s, n, t, v_n] # use slice to copy the value 
         self.state[C.V_N] = 0 # lateral speed is zero
         self.desired_XU0 = None 
-        self.v0 = 10
+        self.v0 = 5
         self.planned_XU0 = [0] * (self.nx*(self.planning_points)+self.nu*(self.planning_points - 1))
         self.planned_XU0[C.V_S::(self.nx+self.nu)] = np.linspace(self.state[C.V_S], self.v0,self.planning_points)
         self.planned_XU0[C.T::(self.nx+self.nu)] = self.state[C.T] + self.planning_dt*np.arange(self.planning_points)
@@ -814,7 +814,7 @@ class Truck_CC(Car_km):
         self.b = 1.5
         self.delta = 4 
         self.T = 3
-        self.v0 = 10
+        self.v0 = 5
         self.s0 = 20
         self.counter_cc_replanning = 0
         self.q = np.diag([1,100,100,1])
@@ -971,7 +971,7 @@ def main():
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([10, -166.722, 37.35755, 0],dt=dt)
+    v1 = Truck_CC([5, -166.722, 37.35755, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
@@ -979,7 +979,7 @@ def main():
     P_road_v = [lane_width, 0.1, 100, 37.35755-1.5 * lane_width,
              lane_width, 0.1, 0, 37.35755-0.5 * lane_width]
     
-    v2 = Car_km([10, -66.72, 37.35755-lane_width, 0],dt=dt)
+    v2 = Car_km([5, -66.72, 37.35755-lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'
