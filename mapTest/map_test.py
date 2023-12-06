@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 dt = 0.02  # Simulation step in seconds
 lane_width = 3.5  # Lane width in meters
 
-P_road_v1 = [0, 0.1, 0, -0.5 * lane_width,
-             0, 0.1, 0, 0.5 * lane_width]
+P_road_v1 = [0, 0.1, 0, 146.818-0.5 * lane_width,
+             0, 0.1, 0, 146.818+0.5 * lane_width]
 
-P_road_v2 = [lane_width, 0.1, 80, -1.5 * lane_width,
-             lane_width, 0.1, 0, -0.5 * lane_width]
+P_road_v2 = [lane_width, 0.1, 80, 146.818-1.5 * lane_width,
+             lane_width, 0.1, 0, 146.818-0.5 * lane_width]
 
 # Define a range of s values to compute the road boundaries
 ss = np.linspace(-900, 2000, 1000)

@@ -964,22 +964,22 @@ def main():
     # replanning_iterations = 10
     # P_road_v1 = [0, 0.1, 0, -0.5*lane_width,
     #             0, 0.1, 0, 0.5*lane_width]exit( )
-    P_road_v1 = [0, 0.1, 0, 37.35755-0.5 * lane_width,
-             0, 0.1, 0, 37.35755+0.5 * lane_width]
+    P_road_v1 = [0, 0.1, 0, 146.818-0.5 * lane_width,
+             0, 0.1, 0, 146.818+0.5 * lane_width]
 
 
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([5, -166.722, 37.35755, 0],dt=dt)
+    v1 = Truck_CC([5, 124-100, 146.818, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
     # Only used for Car (CAV)
-    P_road_v = [lane_width, 0.1, 100, 37.35755-1.5 * lane_width,
-             lane_width, 0.1, 0, 37.35755-0.5 * lane_width]
+    P_road_v = [lane_width, 0.1, 280, 146.818-1.5 * lane_width,
+             lane_width, 0.1, 200, 146.818-0.5 * lane_width]
     
-    v2 = Car_km([5, -56.72, 37.35755-lane_width, 0],dt=dt)
+    v2 = Car_km([5, 124, 146.818-lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'
