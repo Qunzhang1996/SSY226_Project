@@ -979,7 +979,7 @@ def main():
     P_road_v = [lane_width, 0.1, 100, 37.35755-1.5 * lane_width,
              lane_width, 0.1, 0, 37.35755-0.5 * lane_width]
     
-    v2 = Car_km([5, -66.72, 37.35755-lane_width, 0],dt=dt)
+    v2 = Car_km([5, -56.72, 37.35755-lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'

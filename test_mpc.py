@@ -16,7 +16,7 @@ class Car_km():
         self.nu = 2
         self.state = np.zeros(self.nx)
         self.state[:nt] = state
-        self.state[C_k.V_km] = 10
+        self.state[C_k.V_km] = 5
         self.u = np.zeros(self.nu)
         self.q = np.diag([10.0, 10.0, 1.0, 1.0])
         self.r = np.diag([0.01, 0.1]) 
@@ -189,7 +189,7 @@ class Car_km():
         target_point = trajectory[target_idx]
         return target_point, target_idx
     
-    def find_target_trajectory(self, trajectory, point, psi_ref, V_ref=15, N=6):
+    def find_target_trajectory(self, trajectory, point, psi_ref, V_ref=5, N=6):
         # Calculate the squared Euclidean distance to each point in the trajectory
         distances = np.sum((trajectory[:,:2] - point) ** 2, axis=1)
         # Find the index of the closest point
@@ -316,7 +316,7 @@ def main():
         # 设置 y 轴范围
         ax.set_ylim(20, 60)
         ax.set_aspect('equal')
-        plt.pause(0.1)
+        plt.pause(0.001)
         trajectory.append(car.state.copy().flatten())
 
     plt.ioff()
