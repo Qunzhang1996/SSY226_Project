@@ -569,7 +569,7 @@ car_flag = True
 route_car = plan_route(world, start_point_car, dest_x_car, dest_y_car, dest_z_car, sampling_resolution=1, debug_draw=True, car_flag=True)
 #car_thread = threading.Thread(target=drive_vehicle, args=(car, route_car, truck, car_flag))
 car_thread = create_and_start_thread(drive_vehicle, car, route_car, truck, car_flag)
-car_flag = True
+car_flag = False
 route_truck = plan_route2(world, start_point_truck, dest_x_truck, dest_y_truck, dest_z_truck, sampling_resolution=1, debug_draw=True, car_flag=True)
 #truck_thread = threading.Thread(target=drive_vehicle2, args=(truck, route_truck, car, car_flag))
 truck_thread = create_and_start_thread(drive_vehicle, truck, route_truck, car, car_flag)

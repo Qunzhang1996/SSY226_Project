@@ -20,7 +20,6 @@ import scipy.optimize
 
 
 
-
 # Setup
 
 client = carla.Client('localhost', 2000)
@@ -37,46 +36,34 @@ truck_bp = bp_lib.find('vehicle.carlamotors.firetruck')
 
 for actor in world.get_actors().filter('vehicle.*'):
     actor.destroy()
-#清理场景中的其他车辆    
+
 
 # Coordinates
 # Initial and destination coordinates for both the car and the truck are defined.
-# x_car = 78.78953552246094
-# y_car = 218.3877716064453 
-x_car = 300
-y_car = 146.818085
+x_car = 78.78953552246094
+y_car = 218.3877716064453 
 z_car = 2.189335823059082
 
-# dest_x_car = 238.78953552246094
-# dest_y_car = 177.3877716064453 
-dest_x_car = 900
-dest_y_car  = y_car
+dest_x_car = 238.78953552246094
+dest_y_car = 177.3877716064453 
 dest_z_car = z_car
 
-x_truck = x_car+100
-y_truck =150.318085
+x_truck = 109
+y_truck = 160.6210479736328
 z_truck = 1.6630632877349854
 
-dest_x_truck = 1000
+dest_x_truck = 259
 dest_y_truck = y_truck
 dest_z_truck = z_truck
 
 
 # The closest spawn points for the car, truck, and their destinations are determined based on the coordinates.
 start_point_car = min(spawn_points, key=lambda spawn_point: spawn_point.location.distance(carla.Location(x_car, y_car, z_car)))
-start_point_car.location.y = 144.209198+3.5
-start_point_car.rotation.yaw = 180+0.234757
-print("this is car:",start_point_car)
 dest_point_car = min(spawn_points, key=lambda spawn_point: spawn_point.location.distance(carla.Location(dest_x_car, dest_y_car, dest_z_car)))
-dest_point_car.rotation.yaw = 180+0.234757
+print("this is car:",start_point_car)
 start_point_truck = min(spawn_points, key=lambda spawn_point: spawn_point.location.distance(carla.Location(x_truck, y_truck, z_truck)))
-print("this is truck: ",start_point_truck)
-#start_point_truck.location.y = y= 150.318085
-start_point_truck.rotation.yaw = 180+0.234757
 dest_point_truck = min(spawn_points, key=lambda spawn_point: spawn_point.location.distance(carla.Location(dest_x_truck, dest_y_truck, dest_z_truck)))
-
-dest_point_truck.rotation.yaw = 180+0.234757
-
+print("this is truck:",start_point_truck)
 # Spawn the vehicle at the closest spawn point
 car = world.try_spawn_actor(car_bp, start_point_car)
 truck = world.try_spawn_actor(truck_bp, start_point_truck)
@@ -90,6 +77,12 @@ print(transform)
 pref_speed = 50
 speed_threshold = 2
 
+# Define a function to generate a curve
+def generate_curve(A=5, B=0.1, x_max=50):
+    x = np.linspace(0, x_max, 100)
+    y = A * np.sin(B * x)
+    return x, y
+
 def main(vehicle, car_flag, route):
     # Generate the reference curve
     # x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=100)
@@ -98,7 +91,7 @@ def main(vehicle, car_flag, route):
     # concate x_ref and y_ref as 2d array, shape of (N,2)
     ref_points = np.vstack([x_ref, y_ref]).T
     # Initialize car model
-    car = Car_km(state=np.array([610 , 151,-np.pi, 0]))#notice the forth element is time 
+    car = Car_km(state=np.array([110 , 235, np.pi/4, 0]))   # notice the forth element is time 
     #To change the initial velocity, change the in the class Car_km
     #TODO:  
     # self.state[C_k.V_km] = 10, #CHANGE HERE!!!!!!!!
@@ -116,7 +109,7 @@ def main(vehicle, car_flag, route):
 
     plt.ion()
 
-    for i in range(10000):
+    for i in range(250):
 
         plt.cla()
 
@@ -134,37 +127,10 @@ def main(vehicle, car_flag, route):
         u_optimal, predicted_trajectories,car.last_index = \
             car.simulate(carla_state, ref_points, psi_ref, last_index)
         ##############################################################
-        # estimated_throttle = u_optimal[0]
-        # steer_input = u_optimal[1]
-        # # vehicle.apply_control(carla.VehicleControl(throttle=estimated_throttle, steer=steer_input))
-        #  # 处理减速情况
-        # if estimated_throttle < 0:
-        #     # 如果估计的油门小于0，意味着需要减速或刹车
-        #     brake_input = max(estimated_throttle, -1)  # 限制刹车输入在[-1, 0]之间
-        #     throttle_input = 0  # 油门设为0
-        # else:
-        #     # 否则，继续使用估计的油门值
-        #     brake_input = 0
-        #     throttle_input = min(estimated_throttle, 1)  # 限制油门值在[0, 1]之间
-        # vehicle.apply_control(carla.VehicleControl(throttle=throttle_input, steer=steer_input, brake=brake_input))
-        
-        
         estimated_throttle = u_optimal[0]
-        steer_input = np.sin(u_optimal[1])
-        # vehicle.apply_control(carla.VehicleControl(throttle=estimated_throttle, steer=steer_input))
-         # 处理减速情况
-        if estimated_throttle <0:
-            # 如果估计的油门小于0，意味着需要减速或刹车
-            brake_input =  -np.sin(estimated_throttle)  # 使用非线性函数并保证刹车输入在[0, 1]之间
-            throttle_input = 0  # 油门设为0
-        else:
-            # 否则，继续使用估计的油门值
-            throttle_input = np.sin(estimated_throttle)  # 使用非线性函数并保证油门输入在[0, 1]之间
-            brake_input = 0
-
-        vehicle.apply_control(carla.VehicleControl(throttle=throttle_input, steer=steer_input, brake=brake_input)) 
-
-        
+        steer_input = u_optimal[1]
+        print('The steering input to carla is this shit:', steer_input)
+        vehicle.apply_control(carla.VehicleControl(throttle=estimated_throttle, steer=steer_input))
 
         # Visualize the predicted trajectories
         predicted_trajectories = np.array(predicted_trajectories)
@@ -244,8 +210,8 @@ def get_state(vehicle):
     x = vehicle_loc.x 
     y = vehicle_loc.y 
     psi = math.radians(vehicle_rot.yaw)  # Convert yaw to radians
-    # v = math.sqrt(vehicle_vel.x**2 + vehicle_vel.y**2)
-    v = vehicle_vel.length()  #converting it to km/hr
+    v = math.sqrt(vehicle_vel.x**2 + vehicle_vel.y**2)
+    # v = vehicle_vel.length()  #converting it to km/hr
 
     return x, y, psi, v
 
@@ -348,7 +314,7 @@ def drive_vehicle(vehicle, route, other_vehicle, car_flag):
         # Additional conditions or user input for stopping the simulation
         # Calculate distance between the vehicles
         distance_to_other_vehicle = calculate_distance(vehicle, other_vehicle)
-        print(distance_to_other_vehicle)
+        # print(distance_to_other_vehicle)
 
         # Check if the distance is below a threshold
         if distance_to_other_vehicle < 20:

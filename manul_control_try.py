@@ -3,7 +3,9 @@ import math
 import random
 import time
 import socket
-
+from scipy import interpolate
+import numpy as np
+from scipy import optimize
 # Define a function to set throttle/acceleration and steering angle
 def set_vehicle_control(vehicle, throttle, steer):
     control = carla.VehicleControl()
