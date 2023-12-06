@@ -19,8 +19,6 @@ import scipy.interpolate
 import scipy.optimize
 
 
-
-
 # Setup
 
 client = carla.Client('localhost', 2000)
@@ -29,7 +27,7 @@ world = client.get_world()
 bp_lib = world.get_blueprint_library()
 spawn_points = world.get_map().get_spawn_points()
 
-car_bp = bp_lib.find('vehicle.lincoln.mkz_2020')
+car_bp = bp_lib.find('vehicle.tesla.model3')
 truck_bp = bp_lib.find('vehicle.carlamotors.firetruck')
 
 
@@ -43,7 +41,7 @@ for actor in world.get_actors().filter('vehicle.*'):
 # Initial and destination coordinates for both the car and the truck are defined.
 # x_car = 78.78953552246094
 # y_car = 218.3877716064453 
-x_car = 300
+x_car = 124
 y_car = 146.818085
 z_car = 2.189335823059082
 
@@ -64,9 +62,9 @@ dest_z_truck = z_truck
 
 # The closest spawn points for the car, truck, and their destinations are determined based on the coordinates.
 start_point_car = min(spawn_points, key=lambda spawn_point: spawn_point.location.distance(carla.Location(x_car, y_car, z_car)))
-start_point_car.location.y = 144.209198+3.5
-start_point_car.rotation.yaw = 180+0.234757
-print("this is car:",start_point_car)
+#start_point_car.location.y = 144.209198+3.5
+start_point_car.rotation.yaw = 0.234757
+print("this is car_start:",start_point_car)
 dest_point_car = min(spawn_points, key=lambda spawn_point: spawn_point.location.distance(carla.Location(dest_x_car, dest_y_car, dest_z_car)))
 dest_point_car.rotation.yaw = 180+0.234757
 start_point_truck = min(spawn_points, key=lambda spawn_point: spawn_point.location.distance(carla.Location(x_truck, y_truck, z_truck)))

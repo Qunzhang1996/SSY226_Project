@@ -4,12 +4,15 @@ import math
 import scipy
 import casadi as cs
 from enum import IntEnum
+
+import warnings
+warnings.simplefilter("error")
 from scipy import interpolate
 import numpy as np
 from scipy import optimize
 
-import warnings
-warnings.simplefilter("error")
+
+
 
 # Structure for name convenience
 nt = 4  # number of variables in trajectories
@@ -164,9 +167,9 @@ class Car_km(Vehicle):
         #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         self.state_km = np.zeros(self.nx)
         self.u_km = np.zeros(self.nu)
-        self.target_point = []
         
-    def get_state(self):
+        
+    def  get_state(self):
         return self.state[:nt]
 
     def create_car_F(self):  # create a discrete model of the vehicle
@@ -752,6 +755,7 @@ class Car_km(Vehicle):
         tt = self.planned_trajectory[C.T, :]
         t = self.state[C.T]
         state_carla[C_k.T]=t
+        
         #get target point of mass_point
         state_mp_planned[C.V_S] = scipy.interpolate.interp1d(tt,self.planned_XU0[C.V_S::(self.nx+self.nu)],kind='cubic')(t)
         state_mp_planned[C.S]= scipy.interpolate.interp1d(tt,self.planned_XU0[C.S::(self.nx+self.nu)],kind='cubic')(t)
@@ -772,12 +776,8 @@ class Car_km(Vehicle):
         e=np.zeros([self.nx-1,1])
         e[0]=state_carla[C_k.X_km]-state_km_planned[C_k.X_km]
         e[1]=state_carla[C_k.Y_km]-state_km_planned[C_k.Y_km]
-        e[1] = 0.0
-        print('this is Y ERROR', e[1])
         e[2]=state_carla[C_k.Psi]-state_km_planned[C_k.Psi]
         e[3]=state_carla[C_k.V_km]-state_km_planned[C_k.V_km]
-        
-        self.target_point.append([state_km_planned[C_k.X_km][0], state_km_planned[C_k.Y_km][0]])
 
         #make sure the heading error is in the range of [-pi,pi]
         e[2]=np.arctan2(np.sin(e[2]),np.cos(e[2]))
@@ -785,6 +785,7 @@ class Car_km(Vehicle):
         #calculate the input through MPC
         #TODO:have to check the update in the code above AB Calculation
         u_optimal=self.compute_km_mpc(e)
+        
         # R=self.compute_km_K()
         # u_optimal=-np.matmul(R,e)
         print('this is u_optimal_km', u_optimal)
@@ -797,12 +798,15 @@ class Car_km(Vehicle):
         u_optimal_mp=self.input_transform(u_optimal)
         
         #transfer carla state to mp state
-        state_mp_carla=self.transformation_km2mp(state_carla)
+        # state_mp_carla=self.transformation_km2mp(state_carla)
+        self.state_km=self.car_F_km(state_carla,u_optimal,self.dt).full().ravel()
+        self.state=self.transformation_km2mp(self.state_km).ravel()
+
 
         #update the state of the pm vehicle
-        self.state = self.car_F(state_mp_carla, u_optimal_mp, dt).full().ravel()
+        # self.state = self.car_F(state_mp_carla, u_optimal_mp, dt).full().ravel()
         self.history_state.append(self.get_state())
-        self.history_control.append(u_optimal_mp)
+        self.history_control.append(np.array(u_optimal).reshape(-1,1))
         return u_optimal
     
 
@@ -940,8 +944,6 @@ class Truck_CC(Car_km):
         self.history_control.append(u)
         self.history_v_ref.append(self.v_ref)
         return u_optimal_km
-    
-
 
 def get_state(vehicle):
     vehicle_pos = vehicle.get_transform()
@@ -957,9 +959,6 @@ def get_state(vehicle):
     v = vehicle_vel.length()  #converting it to km/hr
 
     return x, y, psi, v
-
-
-
 def main():
     #################
     # In simulation
@@ -967,7 +966,7 @@ def main():
     lane_width = 3.5 # m
     steps_between_replanning = 25 #todo
     # steps_between_replanning = 100
-    replanning_iterations = 100 # 100
+    replanning_iterations = 100
     # replanning_iterations = 10
     # P_road_v1 = [0, 0.1, 0, -0.5*lane_width,
     #             0, 0.1, 0, 0.5*lane_width]exit( )
@@ -978,7 +977,7 @@ def main():
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([5, -166.722, 37.35755, 0],dt=dt)
+    v1 = Truck_CC([5, -266.722, 37.35755, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
@@ -986,7 +985,7 @@ def main():
     P_road_v = [lane_width, 0.1, 80, 37.35755-1.5 * lane_width,
              lane_width, 0.1, 0, 37.35755-0.5 * lane_width]
     
-    v2 = Car_km([5, -66.72, 37.35755-lane_width, 0],dt=dt)
+    v2 = Car_km([5, -166.72, 37.35755-lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'
@@ -1041,7 +1040,7 @@ def main():
                         throttle_input = np.sin(estimated_throttle)
                         brake_input = 0
                     # vehicle1.apply_control(carla.VehicleControl(throttle=throttle_input, steer=steer_input, brake=brake_input)) 
-                else:#control the car                    
+                else:#control the car
                     u_optimal=v.simulate(dt)
                     estimated_throttle = u_optimal[0]
                     steer_input = np.sin(u_optimal[1])
@@ -1075,8 +1074,7 @@ def main():
                 v1.update_twin_state('v2', v2_state)
                 v2.update_twin_state('v1', v1_state)
 
-    # plot target point 
-    print(v2.target_point)
+
     # plot road
     plt.subplot(2, 1, 1)
     ss = np.linspace(-900, 2000, 1000)
@@ -1089,13 +1087,24 @@ def main():
     # plot state and history
     # v0_history_state = np.array(v0.history_state).T
     v1_history_state = np.array(v1.history_state).T
+    v1_history_control=np.array(v1.history_control)
+    with open('save_truck_control.txt', 'w') as file:
+        for row in v1_history_control:
+            file.write(' '.join(map(str, row)) + '\n')
+
 
 
     v2_history_state = np.array(v2.history_state).T
+    v2_history_control=np.array(v2.history_control)
+    with open('save_car_control.txt', 'w') as file:
+        for row in v2_history_control:
+            row_str = ' '.join(str(item[0]) for item in row)
+            file.write(row_str + '\n')
 
     # v0_history_planned = v0.history_planned_trajectory
     v1_history_planned = v1.history_planned_trajectory
     v2_history_planned = v2.history_planned_trajectory
+    
 
 
     # line_v0, = plt.plot(v0_history_state[ST.S], v0_history_state[ST.N])

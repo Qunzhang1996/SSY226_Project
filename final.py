@@ -89,8 +89,8 @@ if car is not None:
     print(f"car的坐标: x={location_car.x}, y={location_car.y}, z={location_car.z}")
 else:
     print("车辆未成功创建")
-velocity1 = carla.Vector3D(54, 0, 0)
-velocity2 = carla.Vector3D(36, 0, 0)
+velocity1 = carla.Vector3D(18, 0, 0)
+velocity2 = carla.Vector3D(18, 0, 0)
 
 
 
@@ -248,7 +248,7 @@ class Car_km(Vehicle):
         self.state[:nt] = state # [v_s, s, n, t, v_n] # use slice to copy the value 
         self.state[C.V_N] = 0 # lateral speed is zero
         self.desired_XU0 = None 
-        self.v0 = 15
+        self.v0 = 5
         self.planned_XU0 = [0] * (self.nx*(self.planning_points)+self.nu*(self.planning_points - 1))
         self.planned_XU0[C.V_S::(self.nx+self.nu)] = np.linspace(self.state[C.V_S], self.v0,self.planning_points)
         self.planned_XU0[C.T::(self.nx+self.nu)] = self.state[C.T] + self.planning_dt*np.arange(self.planning_points)
@@ -933,7 +933,7 @@ class Truck_CC(Car_km):
         self.b = 1.5
         self.delta = 4 
         self.T = 3
-        self.v0 = 10
+        self.v0 = 5
         self.s0 = 20
         self.counter_cc_replanning = 0
         self.q = np.diag([1,100,100,1])
@@ -1100,15 +1100,15 @@ def main():
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([15, -166.722, 37.35755, 0],dt=dt)
+    v1 = Truck_CC([5, -166.722, 37.35755, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
     # Only used for Car (CAV)
-    P_road_v = [lane_width, 0.1, 80, 37.35755-1.5 * lane_width,
+    P_road_v = [lane_width, 0.1, 100, 37.35755-1.5 * lane_width,
              lane_width, 0.1, 0, 37.35755-0.5 * lane_width]
     
-    v2 = Car_km([10, -66.72, 37.35755-lane_width, 0],dt=dt)
+    v2 = Car_km([5, -66.72, 37.35755-lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'
@@ -1134,7 +1134,7 @@ def main():
     # Create a twin vehicle inside v2 with the current state, CAV
     v2.add_vehicle_twin('v1', v1_state)
 
-
+    # start_time = time.time()
     for _ in range(replanning_iterations):
 
         # Compute planned and desired trajectories
@@ -1158,7 +1158,7 @@ def main():
                     steer_input = np.sin(u_optimal[1][0])
                     
                     if steer_input < 0:
-                        brake_input =  0.5+0.5*np.sin(estimated_throttle) # using sin to make sure the brake_input is in [0,1]
+                        brake_input =  0.5-0.5*np.sin(estimated_throttle) # using sin to make sure the brake_input is in [0,1]
                         throttle_input = 0  # throttle is 0 when brake is applied
                     else:
                         throttle_input = np.sin(estimated_throttle)
@@ -1173,7 +1173,7 @@ def main():
                     steer_input = normalization(u_optimal[1])
                     
                     if steer_input < 0:
-                        brake_input =  np.sin(estimated_throttle) # using sin to make sure the brake_input is in [0,1]
+                        brake_input =  -np.sin(estimated_throttle) # using sin to make sure the brake_input is in [0,1]
                         throttle_input = 0  # throttle is 0 when brake is applied
                     else:
                         throttle_input = np.sin(estimated_throttle)
@@ -1184,11 +1184,11 @@ def main():
 
 
                 # Read states of all vehicles
-                # v1_state = v1.get_state()
-                # v2_state = v2.get_state()
+                v1_state = v1.get_state()
+                v2_state = v2.get_state()
                 # Read states of all vehicles from the carla
-                v1_state = get_state(truck)
-                v2_state = get_state(car)
+                # v1_state = get_state(truck)
+                # v2_state = get_state(car)
                 # print("v11_state",v11_state)
                 print("this is car state",v2_state)
                 # print("v1_state",v1_state)
@@ -1206,8 +1206,9 @@ def main():
                 v1.update_twin_state('v2', v2_state)
                 v2.update_twin_state('v1', v1_state)
                 
-
-
+    # pass
+    # end_time = time.time()
+    # print("The loop took {:.2f} seconds to complete.".format(end_time - start_time))
     # plot road
     plt.subplot(2, 1, 1)
     ss = np.linspace(-900, 2000, 1000)
