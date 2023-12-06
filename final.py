@@ -1081,9 +1081,14 @@ def main():
     # plot state and history
     # v0_history_state = np.array(v0.history_state).T
     v1_history_state = np.array(v1.history_state).T
+    print('this is the history state of the truck shape', v1_history_state.shape)
     v1_history_control=np.array(v1.history_control)
     with open('save_truck_control.txt', 'w') as file:
         for row in v1_history_control:
+            file.write(' '.join(map(str, row)) + '\n')
+
+    with open('save_truck_state.txt', 'w') as file:
+        for row in v1_history_state.T:
             file.write(' '.join(map(str, row)) + '\n')
 
 
@@ -1094,6 +1099,10 @@ def main():
         for row in v2_history_control:
             row_str = ' '.join(str(item[0]) for item in row)
             file.write(row_str + '\n')
+
+    with open('save_car_state.txt', 'w') as file:
+        for row in v2_history_state.T:
+            file.write(' '.join(map(str, row)) + '\n')
 
     # v0_history_planned = v0.history_planned_trajectory
     v1_history_planned = v1.history_planned_trajectory
