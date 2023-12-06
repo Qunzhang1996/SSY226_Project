@@ -126,7 +126,7 @@ class Car_km(Vehicle):
         self.state[:nt] = state # [v_s, s, n, t, v_n] # use slice to copy the value 
         self.state[C.V_N] = 0 # lateral speed is zero
         self.desired_XU0 = None 
-        self.v0 = 5
+        self.v0 = 8
         self.planned_XU0 = [0] * (self.nx*(self.planning_points)+self.nu*(self.planning_points - 1))
         self.planned_XU0[C.V_S::(self.nx+self.nu)] = np.linspace(self.state[C.V_S], self.v0,self.planning_points)
         self.planned_XU0[C.T::(self.nx+self.nu)] = self.state[C.T] + self.planning_dt*np.arange(self.planning_points)
@@ -979,7 +979,7 @@ def main():
     P_road_v = [lane_width, 0.1, 280, 146.818-1.5 * lane_width,
              lane_width, 0.1, 200, 146.818-0.5 * lane_width]
     
-    v2 = Car_km([5, 124, 146.818-lane_width, 0],dt=dt)
+    v2 = Car_km([8, 124, 146.818-lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'
@@ -1088,7 +1088,7 @@ def main():
             file.write(' '.join(map(str, row)) + '\n')
 
     with open('save_truck_state.txt', 'w') as file:
-        for row in v1_history_state.T:
+        for row in v1_history_state[1:3].T:
             file.write(' '.join(map(str, row)) + '\n')
 
 
