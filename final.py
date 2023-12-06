@@ -971,7 +971,7 @@ def main():
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([25, -266.722, 37.35755, 0],dt=dt)
+    v1 = Truck_CC([15, -266.722, 37.35755, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
@@ -979,7 +979,7 @@ def main():
     P_road_v = [lane_width, 0.1, 80, 37.35755-1.5 * lane_width,
              lane_width, 0.1, 0, 37.35755-0.5 * lane_width]
     
-    v2 = Car_km([10, -66.72, 37.35755-lane_width, 0],dt=dt)
+    v2 = Car_km([10, -166.72, 37.35755-lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'

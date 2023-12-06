@@ -39,7 +39,7 @@ control_data_path = "/home/zq/Desktop/SSY226_Project/save_car_control.txt"
 control_data = np.loadtxt(control_data_path)  # 从文件读取控制数据
 
 # 初始状态
-x0 = np.array([-66.72, 37.35755-3.5, 0, 0, 10])  # x_km, y_km, psi, t, v_km
+x0 = np.array([-166.72, 37.35755-3.5, 0, 0, 10])  # x_km, y_km, psi, t, v_km
 dt = 0.02  # 时间步长
 x_list = [x0]
 
