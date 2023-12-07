@@ -5,6 +5,32 @@ import time
 import carla
 import numpy as np
 
+
+
+def read_coordinates(file_path):
+    """
+    从文件中读取坐标。
+    """
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+        coordinates = [tuple(map(float, line.split())) for line in lines]
+    return coordinates
+
+def draw_waypoints(world, coordinates, color):
+    """
+    在 Carla 地图上绘制坐标，使用指定的颜色。
+    """
+    for x, y in coordinates:
+        # 假设 Z 坐标为 1.0，可以根据需要调整
+        location = carla.Location(x, y, 0.5)
+        world.debug.draw_point(location, size=0.05, color=color, life_time=120.0)
+
+
+
+
+
+
+
 client = carla.Client('localhost', 2000)
 
 world = client.get_world()
@@ -13,14 +39,14 @@ for actor in world.get_actors().filter('vehicle.*'):
     actor.destroy()
 #清理场景中的其他车辆    
 
-def draw_waypoints(waypoints, road_id=None, life_time=50.0):
+# def draw_waypoints(waypoints, road_id=None, life_time=50.0):
  
-  for waypoint in waypoints:
+#   for waypoint in waypoints:
  
-    if(waypoint.road_id == road_id):
-          world.debug.draw_string(waypoint.transform.location, 'O', draw_shadow=False,
-                                   color=carla.Color(r=0, g=255, b=0), life_time=life_time,
-                                   persistent_lines=True)
+#     if(waypoint.road_id == road_id):
+#           world.debug.draw_string(waypoint.transform.location, 'O', draw_shadow=False,
+#                                    color=carla.Color(r=0, g=255, b=0), life_time=life_time,
+#                                    persistent_lines=True)
  
 #以距离为1的间距创建waypoints                                  
 waypoints = world.get_map().generate_waypoints(distance=1.0)
@@ -163,6 +189,18 @@ with open('C:\CARLA_0.9.14\WindowsNoEditor\PythonAPI\examples\SSY226_Project-sae
 #     print(car.get_location())
 #     time.sleep(float(0.001))
 # 同时遍历两个数据列表
+
+files_and_colors = [
+    ('C:\CARLA_0.9.14\WindowsNoEditor\PythonAPI\examples\SSY226_Project-saeed\save_car_state.txt', carla.Color(255, 0, 0)),  # 红色
+    ('C:\CARLA_0.9.14\WindowsNoEditor\PythonAPI\examples\SSY226_Project-saeed\save_truck_state.txt', carla.Color(0, 255, 0))  # 绿色
+    ]
+
+# 读取坐标并绘制
+for file_path, color in files_and_colors:
+    coordinates = read_coordinates(file_path)
+    draw_waypoints(world, coordinates, color)
+
+
 for line_car, line_truck in zip(data_car, data_truck):
     x_car, y_car = line_car.split()  # 解析小车数据
     x_truck, y_truck = line_truck.split()  # 解析卡车数据
