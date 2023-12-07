@@ -13,12 +13,11 @@ from scipy import interpolate
 import numpy as np
 from scipy import optimize
 
-#car的坐标: x=-66.72234344482422, y=33.8575553894043, z=11.848896980285645
-#truck的坐标: x=-166.7223358154297, y=37.3575553894043, z=11.852168083190918
+#car's corrdinate: x=-66.72234344482422, y=33.8575553894043, z=11.848896980285645
+#truck's corrdinate: x=-166.7223358154297, y=37.3575553894043, z=11.852168083190918
 
 
-##更换地图为Town04
-#python config.py --map Town04
+
 
 import time
 import carla

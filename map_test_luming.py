@@ -1,5 +1,5 @@
-##更换地图为Town04
-#python config.py --map Town04
+##change map to Town06
+#python config.py --map Town06
 
 import time
 import carla
@@ -9,7 +9,7 @@ import numpy as np
 
 def read_coordinates(file_path):
     """
-    从文件中读取坐标。
+    #read coordinates from file
     """
     with open(file_path, 'r') as file:
         lines = file.readlines()
@@ -21,15 +21,9 @@ def draw_waypoints(world, coordinates, color):
     在 Carla 地图上绘制坐标，使用指定的颜色。
     """
     for x, y in coordinates:
-        # 假设 Z 坐标为 1.0，可以根据需要调整
+        # assume Z coordinate is 1.0, can be adjusted as needed
         location = carla.Location(x, y, 0.5)
         world.debug.draw_point(location, size=0.05, color=color, life_time=120.0)
-
-
-
-
-
-
 
 client = carla.Client('localhost', 2000)
 
@@ -37,7 +31,7 @@ world = client.get_world()
 
 for actor in world.get_actors().filter('vehicle.*'):
     actor.destroy()
-#清理场景中的其他车辆    
+#clear other vehicles in the scene 
 
 # def draw_waypoints(waypoints, road_id=None, life_time=50.0):
  
@@ -83,19 +77,19 @@ car = None
 try:
     car = world.spawn_actor(car_bp, spawn_point)
 except Exception as e:
-    print(f"放置车辆时出错: {e}")
+    print(f"wrong when setting vehicle: {e}")
 
 if car is not None:
-    # 稍等片刻以确保车辆坐标已更新
+    # wait for a tick to ensure carla has gotten the updated transform
     time.sleep(0.02)  # 等待1秒
 
     transform = car.get_transform()
     location_car = transform.location
 
-    # 打印车辆的坐标
-    print(f"car的坐标: x={location_car.x}, y={location_car.y}, z={location_car.z}")
+    # print the position of the vehicle
+    print(f"car's corrdinate: x={location_car.x}, y={location_car.y}, z={location_car.z}")
 else:
-    print("车辆未成功创建")
+    print("car is None")
 
 
 truck_bp = bp_lib.find('vehicle.carlamotors.firetruck')
@@ -107,16 +101,16 @@ spawn_point.location.y += 3.5
 spawn_point.location.x -= 100
 spawn_point.rotation.yaw = 0
 truck  = world.spawn_actor(truck_bp, spawn_point)
-time.sleep(0.02)  # 等待1秒
+time.sleep(0.02)  # wait for a tick to ensure carla has gotten the updated transform
 location_truck = truck.get_transform().location
 print(f"truck的坐标: x={location_truck.x}, y={location_truck.y}, z={location_truck.z}")
 
-# 读取控制数据
-control_data_path = "C:\CARLA_0.9.14\WindowsNoEditor\PythonAPI\examples\SSY226_Project-saeed\save_car_control02.txt"
-control_data = np.loadtxt(control_data_path)  # 从文件读取控制数据
+# # 读取控制数据
+# control_data_path = "C:\CARLA_0.9.14\WindowsNoEditor\PythonAPI\examples\SSY226_Project-saeed\save_car_control02.txt"
+# control_data = np.loadtxt(control_data_path)  # 从文件读取控制数据
 
-control_data_path_truck = "C:\CARLA_0.9.14\WindowsNoEditor\PythonAPI\examples\SSY226_Project-saeed\save_truck_control02.txt"
-control_data_truck = np.loadtxt(control_data_path_truck)  # 从文件读取控制数据
+# control_data_path_truck = "C:\CARLA_0.9.14\WindowsNoEditor\PythonAPI\examples\SSY226_Project-saeed\save_truck_control02.txt"
+# control_data_truck = np.loadtxt(control_data_path_truck)  # 从文件读取控制数据
 
 velocity1 = carla.Vector3D(18, 0, 0)
 velocity2 = carla.Vector3D(25.2, 0, 0)
@@ -195,23 +189,22 @@ files_and_colors = [
     ('C:\CARLA_0.9.14\WindowsNoEditor\PythonAPI\examples\SSY226_Project-saeed\save_truck_state.txt', carla.Color(0, 255, 0))  # 绿色
     ]
 
-# 读取坐标并绘制
+# read coordinates from file
 for file_path, color in files_and_colors:
     coordinates = read_coordinates(file_path)
     draw_waypoints(world, coordinates, color)
 
-
 for line_car, line_truck in zip(data_car, data_truck):
-    x_car, y_car = line_car.split()  # 解析小车数据
-    x_truck, y_truck = line_truck.split()  # 解析卡车数据
+    x_car, y_car = line_car.split()  # Parse car data
+    x_truck, y_truck = line_truck.split()  # Parse truck data
 
-    # 设置小车位置
+    # Set car location
     car.set_location(carla.Location(x=float(x_car), y=float(y_car)))
     print(car.get_location())
 
-    # 设置卡车位置（假设您已有一个卡车实体）
+    # Set truck location (assuming you have a truck entity)
     truck.set_location(carla.Location(x=float(x_truck), y=float(y_truck)))
     print(truck.get_location())
 
-    time.sleep(0.0001)  # 等待一小段时间
+    time.sleep(0.0001)  # Wait for a short time
 # car.set_location(carla.Location(x=527.9996547234379, y=143.318, z=0.300000))
