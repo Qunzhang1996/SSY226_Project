@@ -27,7 +27,11 @@ We use the vehicle kinematic model shown below for our control:
 ![this is state space model](./picture/2023-12-07_18-15.png)
 
 
-Sadly, we failed to use carla to repeat the simulation in carla. Because the throttle, brake and steer angle can not be same accurate as in python. However, we use the  get_location method in carla to repeat the simulation in python.  
+Sadly, we failed to use carla to repeat the simulation in python. Because the throttle, brake and steer angle can not be as accurate as in python. However, we use the  get_location method in carla to repeat the simulation in python. 
+This is the simulation result from python with truck 5m/s and car 7m/s. (if increase to higher velocity such as 25m/s, it should also works, but very hard to control in carla....That is why we decrease the velocity).  
+![this is state space model](./picture/python_result.png)
+
+
 The video link is shown below:  
 https://www.youtube.com/playlist?list=PLfi-srdJh5ddZDsl7bJtQfmNswJQYdw1R
 ![this is state space model](./picture/carla_simulation.png)
