@@ -19,7 +19,6 @@ import scipy.interpolate
 import scipy.optimize
 
 
-
 # Setup
 
 client = carla.Client('localhost', 2000)
@@ -73,7 +72,6 @@ print(transform)
 
 
 
-
 pref_speed = 50
 speed_threshold = 2
 
@@ -84,9 +82,12 @@ def generate_curve(A=5, B=0.1, x_max=50):
     return x, y
 
 def main(vehicle, car_flag, route):
+    past_steer=0
+
     # Generate the reference curve
     # x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=100)
     x_ref, y_ref = visualize_route(route)
+
     last_index = 0
     # concate x_ref and y_ref as 2d array, shape of (N,2)
     ref_points = np.vstack([x_ref, y_ref]).T
@@ -109,7 +110,7 @@ def main(vehicle, car_flag, route):
 
     plt.ion()
 
-    for i in range(250):
+    for i in range(130):
 
         plt.cla()
 
@@ -127,10 +128,35 @@ def main(vehicle, car_flag, route):
         u_optimal, predicted_trajectories,car.last_index = \
             car.simulate(carla_state, ref_points, psi_ref, last_index)
         ##############################################################
+        # estimated_throttle = u_optimal[0]
+        # steer_input = u_optimal[1]
+        # print('The steering input to carla is this shit:', steer_input)
+        # vehicle.apply_control(carla.VehicleControl(throttle=estimated_throttle, steer=steer_input))
+        
         estimated_throttle = u_optimal[0]
-        steer_input = u_optimal[1]
-        print('The steering input to carla is this shit:', steer_input)
-        vehicle.apply_control(carla.VehicleControl(throttle=estimated_throttle, steer=steer_input))
+        steer_input = np.sin(u_optimal[1])
+        if steer_input>past_steer+0.1:
+            steer_input=past_steer+0.1
+        elif steer_input<past_steer-0.1:
+            steer_input=past_steer-0.1
+        #steer input should be in -1 ,1
+        steer_input = max(-1, min(1, steer_input))
+        past_steer=steer_input
+        
+        
+        # vehicle.apply_control(carla.VehicleControl(throttle=estimated_throttle, steer=steer_input))
+         # 处理减速情况
+        if estimated_throttle <0:
+            # 如果估计的油门小于0，意味着需要减速或刹车
+            brake_input =  -np.sin(estimated_throttle)  # 使用非线性函数并保证刹车输入在[0, 1]之间
+            throttle_input = 0  # 油门设为0
+        else:
+            # 否则，继续使用估计的油门值
+            throttle_input = np.sin(estimated_throttle)  # 使用非线性函数并保证油门输入在[0, 1]之间
+            brake_input = 0
+
+        vehicle.apply_control(carla.VehicleControl(throttle=throttle_input, steer=steer_input, brake=brake_input)) 
+
 
         # Visualize the predicted trajectories
         predicted_trajectories = np.array(predicted_trajectories)
@@ -363,6 +389,8 @@ def drive_vehicle(vehicle, route, other_vehicle, car_flag):
 # Test for running
 car_flag = True
 route_car = plan_route(world, start_point_car, dest_x_car, dest_y_car, dest_z_car, sampling_resolution=1, debug_draw=True, car_flag=True)
+print("route_car:",route_car)
+print("this is car:",start_point_car)
 car_thread = threading.Thread(target=drive_vehicle, args=(car, route_car, truck, car_flag))
 
 car_flag = False

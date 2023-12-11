@@ -112,7 +112,7 @@ print(f"truck的坐标: x={location_truck.x}, y={location_truck.y}, z={location_
 # control_data_path_truck = "C:\CARLA_0.9.14\WindowsNoEditor\PythonAPI\examples\SSY226_Project-saeed\save_truck_control02.txt"
 # control_data_truck = np.loadtxt(control_data_path_truck)  # 从文件读取控制数据
 
-velocity1 = carla.Vector3D(18, 0, 0)
+velocity1 = carla.Vector3D(50, 0, 0)
 velocity2 = carla.Vector3D(25.2, 0, 0)
 
 #truck.set_target_velocity(velocity1)

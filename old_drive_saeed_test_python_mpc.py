@@ -91,7 +91,12 @@ speed_threshold = 2
 def main(vehicle, car_flag, route):
     # Generate the reference curve
     # x_ref, y_ref = generate_curve(A=20, B=0.05, x_max=100)
+    # print("this is route shape",np.shape(route))
+    # print("this is route",route)
+    # exit()
+
     x_ref, y_ref = visualize_route(route)
+
     last_index = 0
     # concate x_ref and y_ref as 2d array, shape of (N,2)
     ref_points = np.vstack([x_ref, y_ref]).T
@@ -269,8 +274,7 @@ def plan_route(world, start_point, dest_x, dest_y, dest_z, sampling_resolution=1
     grp = GlobalRoutePlanner(world.get_map(), sampling_resolution)
 
     route = grp.trace_route(point_a, point_b)
-    print(route)
-
+    
     if debug_draw:
         if car_flag:
             for waypoint in route:
@@ -282,6 +286,7 @@ def plan_route(world, start_point, dest_x, dest_y, dest_z, sampling_resolution=1
                     life_time=60.0,
                     persistent_lines=True
             )
+    
 
     return route
 def visualize_route(route):

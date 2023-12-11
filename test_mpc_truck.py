@@ -9,14 +9,14 @@ class C_k(IntEnum):
     X_km, Y_km, Psi, T, V_km =range(5) # range(5) means 0,1,2,3,4
 
 
-class Car_km():
+class Truck_km():
     def __init__(self, state, dt=0.02, nt=4, L=2.8):
         self.L = L
         self.nx = 5
         self.nu = 2
         self.state = np.zeros(self.nx)
         self.state[:nt] = state
-        self.state[C_k.V_km] = 15
+        self.state[C_k.V_km] = 10
         self.u = np.zeros(self.nu)
         #self.q = np.diag([1.0, 1.0, 0.5, 0.5])
         #self.q = np.diag([0.01, 0.01, 0.5, 0.5])
@@ -202,7 +202,7 @@ class Car_km():
         target_point, target_idx = self.find_target_point(ref_points, current_position, \
                                                           1,last_index)
         last_index = target_idx
-        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 15])
+        ref_state = np.array([target_point[0], target_point[1], psi_ref[target_idx], 18])
         error = state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]] - ref_state
         heading_error = np.arctan2(np.sin(error[2]), np.cos(error[2]))
         error[2] = heading_error
