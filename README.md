@@ -27,8 +27,7 @@ We use the vehicle kinematic model shown below for our control:
 ![this is state space model](./picture/2023-12-07_18-15.png)
 
 
-Sadly, we failed to use carla to repeat the simulation in python. Because the throttle, brake and steer angle can not be as accurate as in python. However, we use the  get_location method in carla to repeat the simulation in python. 
-This is the simulation result from python with truck 5m/s and car 7m/s. (if increase to higher velocity such as 25m/s, it should also works, but very hard to control in carla....That is why we decrease the velocity).  
+Sadly, we failed to use carla to repeat the simulation in python. Because the throttle, brake and steering angle cannot be as accurate as in Python. And due to the real-time solution state, the lag in solving the QP problem prevents CARLA from controlling the vehicle's movement in a timely manner. We were not able to achieve direct control of the vehicle. DEMO demonstrations can only be achieved through trajectory tracking, which is not true V2V lane merging.
 ![this is state space model](./picture/python_result.png)
 
 
