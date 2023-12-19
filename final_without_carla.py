@@ -121,12 +121,12 @@ class Car_km(Vehicle):
         super().__init__(state)
         self.nx = 5
         self.nu = 2
-        self.L=4.89
+        self.L=2.89
         self.state = np.zeros(self.nx)
         self.state[:nt] = state # [v_s, s, n, t, v_n] # use slice to copy the value 
         self.state[C.V_N] = 0 # lateral speed is zero
         self.desired_XU0 = None 
-        self.v0 = 8
+        self.v0 = 15 # m/s
         self.planned_XU0 = [0] * (self.nx*(self.planning_points)+self.nu*(self.planning_points - 1))
         self.planned_XU0[C.V_S::(self.nx+self.nu)] = np.linspace(self.state[C.V_S], self.v0,self.planning_points)
         self.planned_XU0[C.T::(self.nx+self.nu)] = self.state[C.T] + self.planning_dt*np.arange(self.planning_points)
@@ -309,7 +309,7 @@ class Car_km(Vehicle):
                 opti.subject_to(
                     X[:, k+1] - self.car_F(X[:, k], U[:, k], p_dt) == 0)
                 # input constraints
-                opti.subject_to(opti.bounded(-5, a_s[k], 5))
+                opti.subject_to(opti.bounded(-1, a_s[k], 1))
                 opti.subject_to(opti.bounded(-1, a_n[k], 1))
             # velocity constraints
             opti.subject_to(opti.bounded(1, v_s[k], 35))
@@ -971,7 +971,7 @@ def main():
     # Create two independent objects to represent two vehicles
 
     # CC Truck
-    v1 = Truck_CC([5, 124-100, 146.818, 0],dt=dt)
+    v1 = Truck_CC([15, 124-100, 146.818, 0],dt=dt)
     v1.P_road_v = P_road_v1
     v1.name = 'v1'
 
@@ -979,7 +979,7 @@ def main():
     P_road_v = [lane_width, 0.1, 280, 146.818-1.5 * lane_width,
              lane_width, 0.1, 200, 146.818-0.5 * lane_width]
     
-    v2 = Car_km([8, 124, 146.818-lane_width, 0],dt=dt)
+    v2 = Car_km([15, 124, 146.818-lane_width, 0],dt=dt)
     v2.P_road_v = P_road_v
     v2.lane_width = lane_width
     v2.name = 'v2'

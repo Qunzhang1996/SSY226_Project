@@ -299,7 +299,7 @@ class Car(Vehicle):
                 opti.subject_to(
                     X[:, k+1] - self.car_F(X[:, k], U[:, k], p_dt) == 0)
                 # input constraints
-                opti.subject_to(opti.bounded(-5, a_s[k], 5))
+                opti.subject_to(opti.bounded(-1, a_s[k], 1))
                 opti.subject_to(opti.bounded(-1, a_n[k], 1))
             # velocity constraints
             opti.subject_to(opti.bounded(1, v_s[k], 35))
