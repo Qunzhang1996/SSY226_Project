@@ -1,6 +1,6 @@
 # SSY226_Project
 This is for SSY226 design project from chalmers university of technology.
-
+![this is state space model](./picture/poster.jpeg)
 ## link for papers:
 https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9304813  
 code from github: https://github.com/spc11400/lane-merging-algorithms
