@@ -218,7 +218,7 @@ class Car_km(Vehicle):
         opti_options['expand'] = True
         # opti_options['ipopt.print_level'] = 5 # print logs of the solver
         opti_options['ipopt.print_level'] = 0  # do not print
-        opti_options['print_time'] = False
+        opti_options['print_time'] = True
         # opti_options['ipopt.linear_solver'] = "ma57" # needs to be requested and installed separately
         opti_options['ipopt.sb'] = 'yes'
         opti.solver("ipopt", opti_options)
@@ -296,8 +296,8 @@ class Car_km(Vehicle):
             x0 = self.state
         # print('this is x0')
         # print(x0)
-        print(self.name, 'current/projected state for s', self.state[C.S], x0[C.S])
-        print(self.name, 'current/projected state for v_s', self.state[C.V_S], x0[C.V_S])
+        # print(self.name, 'current/projected state for s', self.state[C.S], x0[C.S])
+        # print(self.name, 'current/projected state for v_s', self.state[C.V_S], x0[C.V_S])
 
         # At start only planned
         # Check if there is a conflict

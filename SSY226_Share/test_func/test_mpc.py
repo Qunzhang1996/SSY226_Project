@@ -153,7 +153,7 @@ class Car_km():
             opti.subject_to(opti.bounded(u_min[j], U[j, :], u_max[j]))
         
         # Configure the solver
-        opts = {"ipopt.print_level": 0, "print_time": 0}
+        opts = {"ipopt.print_level": 0, "print_time": 1}
         opti.solver('ipopt', opts)
 
         # Set the value of the reference state parameter
@@ -239,10 +239,10 @@ class Car_km():
         last_index = target_idx
 
         u_optimal, predicted_trajectories = self.compute_km_mpc(state_carla[[C_k.X_km, C_k.Y_km, C_k.Psi, C_k.V_km]], target_trajectory)
-        print('this is the u_optimal',u_optimal)
+        # print('this is the u_optimal',u_optimal)
         # Visualize the predicted trajectories
         self.state = self.car_F(state_carla, u_optimal, self.dt).full().flatten()
-        print('this is the state in km', self.state)
+        # print('this is the state in km', self.state)
         #here, return the u_optimal for carla to use,with degree
         u_optimal[1]=self.rad2deg(u_optimal[1])
 

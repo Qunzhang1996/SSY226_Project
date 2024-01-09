@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 dt = 0.02  # Simulation step in seconds
 lane_width = 3.5  # Lane width in meters
 
-P_road_v1 = [0, 0.1, 312.277222, 150.318085-0.5 * lane_width,
-             0, 0.1, 312.277222, 150.318085+0.5 * lane_width]
+P_road_v1 = [0, 0.1, 312.277222, 150.318085 - 0.5 * lane_width,
+             0, 0.1, 312.277222, 150.318085 + 0.5 * lane_width]
 
-P_road_v2 = [lane_width, 0.1, 312.277222+80, 150.318085-1.5 * lane_width,
-             lane_width, 0.1, 312.277222, 150.318085-0.5 * lane_width]
+P_road_v2 = [lane_width, 0.1, 312.277222 + 80, 150.318085 - 1.5 * lane_width,
+             lane_width, 0.1, 312.277222, 150.318085 - 0.5 * lane_width]
 
 # Define a range of s values to compute the road boundaries
 ss = np.linspace(-900, 2000, 1000)
@@ -22,29 +22,24 @@ road_left_v1 = P_road_v1[4]/2 * (np.tanh(P_road_v1[5]*(ss - P_road_v1[6])) + 1) 
 road_right_v2 = P_road_v2[0]/2 * (np.tanh(P_road_v2[1]*(ss - P_road_v2[2])) + 1) + P_road_v2[3]
 road_left_v2 = P_road_v2[4]/2 * (np.tanh(P_road_v2[5]*(ss - P_road_v2[6])) + 1) + P_road_v2[7]
 
-# Plotting the curves for P_road_v1 and P_road_v2 side by side
-plt.figure(figsize=(15, 6))
+# Create a plot
+plt.figure(figsize=(10, 3))
 
-# P_road_v1
-plt.subplot(1, 2, 1)
+# Plotting the curves for P_road_v1 and P_road_v2
 plt.plot(ss, road_right_v1, 'b', label='Right Boundary v1')
 plt.plot(ss, road_left_v1, 'r', label='Left Boundary v1')
-plt.title('Road Boundaries for P_road_v1')
+plt.plot(ss, road_right_v2, 'b--', label='Right Boundary v2')
+plt.plot(ss, road_left_v2, 'r--', label='Left Boundary v2')
+
+# Add title, labels, legend, and grid to the plot
+plt.title('Annotated Road Boundaries for P_road_v1 and P_road_v2')
 plt.xlabel('s-coordinate')
 plt.ylabel('Lateral position')
 plt.legend()
 plt.grid(True)
+#lenged on right top
+plt.legend(loc='upper right')
 
-# P_road_v2
-plt.subplot(1, 2, 2)
-plt.plot(ss, road_right_v2, 'b', label='Right Boundary v2')
-plt.plot(ss, road_left_v2, 'r', label='Left Boundary v2')
-plt.title('Road Boundaries for P_road_v2')
-plt.xlabel('s-coordinate')
-plt.ylabel('Lateral position')
-plt.legend()
-plt.grid(True)
-
-# Show the plot with a tight layout
+# Adjust layout and show the plot
 plt.tight_layout()
 plt.show()

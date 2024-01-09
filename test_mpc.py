@@ -16,15 +16,18 @@ class Car_km():
         self.nu = 2
         self.state = np.zeros(self.nx)
         self.state[:nt] = state
-        self.state[C_k.V_km] = 5
+        self.state[C_k.V_km] = 20
         self.u = np.zeros(self.nu)
-        self.q = np.diag([10.0, 10.0, 1.0, 1.0])
+        self.q = np.diag([10, 10.0, 1.0, 10.0])
         self.r = np.diag([0.01, 0.1]) 
         self.dt = dt
         self.lasy_index = 0
+        self.create_car_test_km()  # Create the vehicle model
+        self.create_car_F_km() 
 
     def create_car_F_km(self):  # Create a discrete model of the vehicle
         nx = self.nx
+        
         nu = self.nu
         x = cs.SX.sym('x', nx)
         u = cs.SX.sym('u', nu)
@@ -52,6 +55,34 @@ class Car_km():
         self.K_x = cs.vertcat(x_km, y_km, psi, v_km)
         self.K_u = cs.vertcat(a_km, delta)
         self.kinematic_car_model = cs.Function('kinematic_car_model', [self.K_x, self.K_u], [self.K_dot_x])
+        
+        
+    def create_car_test_km(self):
+        nx = self.nx - 1  # 如果不考虑时间作为状态的一部分
+        nu = self.nu
+        x = cs.SX.sym('x', nx)
+        u = cs.SX.sym('u', nu)
+        # 定义状态变量和控制输入
+        x_km, y_km, psi, v_km = x[0], x[1], x[2], x[3]
+        a_km, delta = u[0], u[1]
+
+        # 定义动力学方程
+        dot_x_km = v_km * cs.cos(psi)
+        dot_y_km = v_km * cs.sin(psi)
+        dot_psi = v_km / self.L * cs.tan(delta)
+        dot_v_km = a_km
+        dot_x = cs.vertcat(dot_x_km, dot_y_km, dot_psi, dot_v_km)
+
+        # 创建连续时间动力学函数
+        f = cs.Function('f', [x, u], [dot_x])
+
+        # 选择积分器和积分步长
+        dt = self.dt  # 时间步长
+
+        # 创建积分器（例如 RK4）
+        int_opts = {'tf': dt, 'simplify': True, 'number_of_finite_elements': 4}
+        F_test = cs.integrator('F', 'rk', {'x': x, 'p': u, 'ode': dot_x}, int_opts)
+        self.car_F_test = F_test
 
     def calculate_AB(self, dt_sim, state_input=None):
         nx = self.nx
@@ -102,14 +133,22 @@ class Car_km():
         R = la.solve(self.r + b.T.dot(P).dot(b), b.T.dot(P).dot(a))
         self.R = R
         self.P = P
-        return R
+        return P
+    
+    def compute_LQR_P(self,a,b):
+        from scipy import linalg as la
+        P = la.solve_discrete_are(a, b, self.q, self.r)
+        R = la.solve(self.r + b.T.dot(P).dot(b), b.T.dot(P).dot(a))
+        self.R = R
+        self.P = P
+        return P
 
     # Calculate the direction at each point
-    def compute_km_mpc(self, state, ref_states, N=6):
+    def compute_km_mpc(self, state, ref_states, N=10):
         nx = self.nx
         nu = self.nu
         nx = nx - 1
-
+        
         # Create a QP problem
         opti = cs.Opti()  
         # Decision variables for state and input
@@ -121,6 +160,8 @@ class Car_km():
         # Objective function
         obj = 0  # Initiate objective function
         for i in range(N):
+            # a, b = self.calculate_AB(self.dt, X[:, i])
+            # self.q=self.compute_LQR_P(a,b)
             state_error = X[:, i] - Ref[:, i]  # State deviation from reference
             obj += cs.mtimes([state_error.T, self.q, state_error])  # State cost
             obj += cs.mtimes([U[:, i].T, self.r, U[:, i]])  # Control cost
@@ -132,15 +173,15 @@ class Car_km():
         # Constraints
         for i in range(N):
             # Recalculate the linearized matrices A and B based on the current predicted state
-            C = cs.vertcat(
-                self.dt * X[3, i] * cs.sin(X[2, i]) * X[2, i],
-                -self.dt * X[3, i] * cs.cos(X[2, i]) * X[2, i],
-                0.0,
-                -self.dt * X[3, i] * U[1, i] / (self.L * cs.cos(U[1, i]) ** 2))
+            # C = cs.vertcat(
+            #     self.dt * X[3, i] * cs.sin(X[2, i]) * X[2, i],
+            #     -self.dt * X[3, i] * cs.cos(X[2, i]) * X[2, i],
+            #     0.0,
+            #     -self.dt * X[3, i] * U[1, i] / (self.L * cs.cos(U[1, i]) ** 2))
             
 
-            a, b = self.calculate_AB(self.dt, X[:, i])
-            next_state_pred = cs.mtimes(a, X[:, i]) + cs.mtimes(b, U[:, i]) + C
+            # a, b = self.calculate_AB(self.dt, X[:, i])
+            next_state_pred = self.car_F_test(x0=X[:,i], p=U[:, i])['xf']
             opti.subject_to(X[:, i+1] == next_state_pred)
         
         # Initial constraints - setting the first state in the prediction to the current state
@@ -189,7 +230,7 @@ class Car_km():
         target_point = trajectory[target_idx]
         return target_point, target_idx
     
-    def find_target_trajectory(self, trajectory, point, psi_ref, V_ref=5, N=6):
+    def find_target_trajectory(self, trajectory, point, psi_ref, V_ref=20, N=10):
         # Calculate the squared Euclidean distance to each point in the trajectory
         distances = np.sum((trajectory[:,:2] - point) ** 2, axis=1)
         # Find the index of the closest point
@@ -265,15 +306,15 @@ def generate_curve(A=5, B=0.1, x_max=100):
 
 def main():
     # Generate the reference curve
-    data = np.loadtxt('/home/zq/Desktop/SSY226_Project/save_car_state.txt')
-    # x_ref, y_ref = generate_curve(A=30, B=0.04, x_max=200)
-    x_ref = data[:, 0]
-    y_ref = data[:, 1]
+    # data = np.loadtxt('/home/zq/Desktop/SSY226_Project/save_car_state.txt')
+    x_ref, y_ref = generate_curve(A=30, B=0.02, x_max=200)
+    # x_ref = data[:, 0]
+    # y_ref = data[:, 1]
     last_index = 0
     # concate x_ref and y_ref as 2d array, shape of (N,2)
     ref_points = np.vstack([x_ref, y_ref]).T
     # Initialize car model
-    car = Car_km(state=np.array([-66.72, 37.35755-3.5, 0, 0]))#notice the forth element is time 
+    car = Car_km(state=np.array([0, 0, np.pi/4, 0]))#notice the forth element is time 
     #To change the initial velocity, change the in the class Car_km
     #TODO:  self.state[C_k.V_km] = 10, CHANGE HERE!!!!!!!!
 
@@ -288,7 +329,7 @@ def main():
     fig, ax = plt.subplots()
     plt.ion()
 
-    for i in range(2480):
+    for i in range(1000):
         ax.clear()  # 清除轴内容
 
         # 模拟车辆的一个时间步
@@ -313,8 +354,8 @@ def main():
         car_rect = plt.Rectangle((car_x, car_y), car_length, car_width, angle=car_angle, edgecolor='blue', facecolor='none')
         ax.add_patch(car_rect)
 
-        # 设置 y 轴范围
-        ax.set_ylim(20, 60)
+        # # 设置 y 轴范围
+        # ax.set_ylim(20, 60)
         ax.set_aspect('equal')
         plt.pause(0.001)
         trajectory.append(car.state.copy().flatten())

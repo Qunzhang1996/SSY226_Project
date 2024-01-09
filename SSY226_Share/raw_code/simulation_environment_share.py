@@ -314,7 +314,7 @@ class Car(Vehicle):
         opti_options['expand'] = True
         # opti_options['ipopt.print_level'] = 5 # print logs of the solver
         opti_options['ipopt.print_level'] = 0  # do not print
-        opti_options['print_time'] = False
+        opti_options['print_time'] = True
         # opti_options['ipopt.linear_solver'] = "ma57" # needs to be requested and installed separately
         opti_options['ipopt.sb'] = 'yes'
     
@@ -642,7 +642,7 @@ class Truck_CC(Car):
 
 #################state
 # In simulation
-dt = 0.02  # simulations step in seconds
+dt = 0.1  # simulations step in seconds
 lane_width = 3.5 # m
 steps_between_replanning = 25
 # steps_between_replanning = 100
