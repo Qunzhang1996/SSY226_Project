@@ -1,6 +1,7 @@
 # SSY226_Project
 This is for SSY226 design project from chalmers university of technology.  
-Code copyright@Our project supervisor: Pavel Anistratov(pavel.anistratov@chalmers.se) 
+Code copyright@Our project supervisor: Pavel Anistratov(pavel.anistratov@chalmers.se)  
+For the final report, pls check "Modeling and Simulation of Collaborative_Group 11.pdf" in main branch  
 ![this is state space model](./picture/poster.jpeg)
 ## reference paper
 Reference paper pls check the reference paper folder
