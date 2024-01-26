@@ -1,7 +1,7 @@
 # SSY226_Project
 This is for SSY226 design project from chalmers university of technology.  
-For the trajectory tracking, pls check luming branch-map_test_luming_traj_tracking.py
-Code copyright@Our project supervisor: Pavel Anistratov(pavel.anistratov@chalmers.se)  
+## For the trajectory tracking, pls check luming branch-map_test_luming_traj_tracking.py   
+## Code copyright@Our project supervisor: Pavel Anistratov(pavel.anistratov@chalmers.se)  
 For the final report, pls check "Modeling and Simulation of Collaborative Highway-merging Vehicles_Group 11" in main branch  
 ![this is state space model](./picture/poster.jpeg)
 ## reference paper
