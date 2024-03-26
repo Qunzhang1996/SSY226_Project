@@ -37,8 +37,6 @@ Our project's implementations and results are showcased in a series of videos av
 
 To aid in understanding our project's methodologies and results, we have included several visual representations:
 
-![State Space Model](./picture/poster.jpeg)
-*State Space Model Visualization*
 
 ![CARLA Simulation](./picture/carla_simulation.png)
 *CARLA Simulation for Collaborative Highway-merging*
