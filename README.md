@@ -37,6 +37,8 @@ Our project's implementations and results are showcased in a series of videos av
 
 To aid in understanding our project's methodologies and results, we have included several visual representations:
 
+![poster](./picture/poster.jpeg)
+*poster*
 
 ![CARLA Simulation](./picture/carla_simulation.png)
 *CARLA Simulation for Collaborative Highway-merging*
